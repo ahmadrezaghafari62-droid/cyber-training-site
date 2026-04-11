@@ -1,62 +1,57 @@
 import { useEffect, useState } from "react";
 import { auth, db } from "./firebase";
 import { onAuthStateChanged } from "firebase/auth";
-import { doc, getDoc } from "firebase/firestore";
+import { doc, onSnapshot } from "firebase/firestore";
 import { Navigate } from "react-router-dom";
 
 function PaymentRoute({ children }) {
   const [loading, setLoading] = useState(true);
-  const [isSubscribed, setIsSubscribed] = useState(false);
+  const [subscribed, setSubscribed] = useState(false);
   const [user, setUser] = useState(null);
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
+    const unsubscribeAuth = onAuthStateChanged(auth, (currentUser) => {
       if (!currentUser) {
-        setUser(null);
         setLoading(false);
         return;
       }
 
       setUser(currentUser);
 
-      try {
-        const docRef = doc(db, "users", currentUser.uid);
-        const docSnap = await getDoc(docRef);
+      const unsubscribeFirestore = onSnapshot(
+        doc(db, "users", currentUser.uid),
+        (docSnap) => {
+          if (docSnap.exists()) {
+            const data = docSnap.data();
 
-        if (docSnap.exists()) {
-          const data = docSnap.data();
-          console.log("📊 Firestore data:", data);
+            console.log("🔥 USER DATA:", data);
 
-          setIsSubscribed(data?.isSubscribed === true);
-        } else {
-          console.log("❌ User doc missing");
-          setIsSubscribed(false);
+            setSubscribed(data.isSubscribed === true);
+          }
+
+          setLoading(false);
         }
+      );
 
-      } catch (error) {
-        console.error("🔥 Firestore error:", error.message);
-        setIsSubscribed(false);
-      }
-
-      setLoading(false);
+      return () => unsubscribeFirestore();
     });
 
-    return () => unsubscribe();
+    return () => unsubscribeAuth();
   }, []);
 
-  if (loading) return <p style={{ textAlign: "center" }}>Loading...</p>;
+  if (loading) {
+    return <p style={{ textAlign: "center" }}>Checking access...</p>;
+  }
 
-  // ❌ Not logged in → go login
   if (!user) {
     return <Navigate to="/login" />;
   }
 
-  // ❌ Not subscribed → go payment
-  if (!isSubscribed) {
+  // 🚨 ONLY CHECK SUBSCRIPTION
+  if (!subscribed) {
     return <Navigate to="/payment" />;
   }
 
-  // ✅ Allowed
   return children;
 }
 

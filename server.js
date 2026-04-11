@@ -1,11 +1,15 @@
-const express = require("express");
-const cors = require("cors");
 require("dotenv").config();
 
+const express = require("express");
+const cors = require("cors");
 const stripe = require("stripe")(process.env.STRIPE_SECRET_KEY);
-
-// 🔥 Firebase Admin
 const admin = require("firebase-admin");
+const nodemailer = require("nodemailer");
+
+const app = express();
+
+/* ================= FIREBASE ================= */
+
 const serviceAccount = JSON.parse(process.env.FIREBASE_KEY);
 
 admin.initializeApp({
@@ -14,69 +18,47 @@ admin.initializeApp({
 
 const db = admin.firestore();
 
-const app = express();
+/* ================= EMAIL ================= */
 
-/* ================================
-   🔥 MIDDLEWARE
-================================ */
-
-// Stripe webhook MUST use raw body
-app.use("/webhook", express.raw({ type: "application/json" }));
-
-app.use(cors());
-app.use(express.json());
-
-/* ================================
-   💳 CREATE CHECKOUT SESSION
-================================ */
-
-app.post("/create-checkout-session", async (req, res) => {
-  try {
-    const { userId } = req.body;
-
-    if (!userId) {
-      console.log("❌ Missing userId");
-      return res.status(400).json({ error: "Missing userId" });
-    }
-
-    console.log("👉 Creating session for:", userId);
-
-    const session = await stripe.checkout.sessions.create({
-      payment_method_types: ["card"],
-      mode: "subscription",
-
-      line_items: [
-        {
-          price: "price_1TEqF9FUdoCkyCR9kGVzXeed",
-          quantity: 1,
-        },
-      ],
-
-      success_url: `${process.env.FRONTEND_URL}/dashboard`,
-      cancel_url: `${process.env.FRONTEND_URL}/payment`,
-
-      metadata: {
-        userId,
-      },
-    });
-
-    console.log("✅ Session created:", session.id);
-
-    res.json({ url: session.url });
-
-  } catch (error) {
-    console.error("🔥 Stripe Error:", error.message);
-    res.status(500).json({ error: error.message });
-  }
+const transporter = nodemailer.createTransport({
+  service: "gmail",
+  auth: {
+    user: process.env.EMAIL_USER,
+    pass: process.env.EMAIL_PASS,
+  },
 });
 
-/* ================================
-   🔔 STRIPE WEBHOOK
-================================ */
+const sendEmail = async (email, message) => {
+  try {
+    await transporter.sendMail({
+      from: `"CyberSentinel" <${process.env.EMAIL_USER}>`,
+      to: email,
+      subject: "CyberSentinel Notification",
+      text: message,
+    });
+    console.log("📧 Email sent:", email);
+  } catch (err) {
+    console.error("❌ Email error:", err.message);
+  }
+};
 
-const endpointSecret = process.env.STRIPE_WEBHOOK_SECRET;
+/* ================= CORS ================= */
 
-app.post("/webhook", async (req, res) => {
+app.use(cors({
+  origin: [
+    "http://localhost:3000",
+    "https://cyber-training-site.web.app",
+    "https://cyber-training-site.firebaseapp.com",
+    "https://cybersentinelhq.io"
+  ],
+  credentials: true
+}));
+
+/* ================= WEBHOOK (CRITICAL) ================= */
+
+app.post("/webhook", express.raw({ type: "application/json" }), async (req, res) => {
+  console.log("🚨 WEBHOOK HIT");
+
   const sig = req.headers["stripe-signature"];
 
   let event;
@@ -85,53 +67,182 @@ app.post("/webhook", async (req, res) => {
     event = stripe.webhooks.constructEvent(
       req.body,
       sig,
-      endpointSecret
+      process.env.STRIPE_WEBHOOK_SECRET
     );
   } catch (err) {
     console.error("❌ Webhook signature failed:", err.message);
     return res.sendStatus(400);
   }
 
-  console.log("🔔 Event received:", event.type);
+  console.log("🔔 Stripe event:", event.type);
 
-  if (event.type === "checkout.session.completed") {
-    const session = event.data.object;
-    const userId = session.metadata?.userId;
+  try {
+    switch (event.type) {
 
-    console.log("👤 userId:", userId);
+      case "checkout.session.completed": {
+        const session = event.data.object;
 
-    if (!userId) return res.sendStatus(400);
+        const userId = session.metadata?.userId;
 
-    try {
-      await db.collection("users").doc(userId).set(
-        {
+        console.log("🔥 USER ID:", userId);
+
+        if (!userId) break;
+
+        await db.collection("users").doc(userId).set({
           isSubscribed: true,
+          subscriptionStatus: "active",
+          stripeCustomerId: session.customer,
+          subscriptionId: session.subscription,
           updatedAt: new Date(),
-        },
-        { merge: true }
-      );
+        }, { merge: true });
 
-      console.log("✅ User upgraded:", userId);
+        console.log("✅ Firestore updated");
 
-    } catch (error) {
-      console.error("🔥 Firestore error:", error.message);
+        const userDoc = await db.collection("users").doc(userId).get();
+
+        if (userDoc.exists) {
+          await sendEmail(
+            userDoc.data().email,
+            "🎉 Your subscription is now active!"
+          );
+        }
+
+        break;
+      }
+
+      case "customer.subscription.deleted": {
+        const subscription = event.data.object;
+
+        const users = await db.collection("users")
+          .where("subscriptionId", "==", subscription.id)
+          .get();
+
+        for (const docSnap of users.docs) {
+          await docSnap.ref.update({
+            isSubscribed: false,
+            subscriptionStatus: "cancelled",
+          });
+        }
+
+        break;
+      }
+
+      case "invoice.payment_failed": {
+        const invoice = event.data.object;
+
+        const users = await db.collection("users")
+          .where("stripeCustomerId", "==", invoice.customer)
+          .get();
+
+        for (const docSnap of users.docs) {
+          await docSnap.ref.update({
+            subscriptionStatus: "past_due",
+          });
+        }
+
+        break;
+      }
+
+      default:
+        console.log("ℹ️ Unhandled event:", event.type);
     }
+
+  } catch (error) {
+    console.error("🔥 Webhook processing error:", error.message);
   }
 
   res.sendStatus(200);
 });
 
-/* ================================
-   🧪 TEST ROUTE
-================================ */
+/* ================= JSON AFTER WEBHOOK ================= */
+
+app.use(express.json());
+
+/* ================= CREATE CHECKOUT ================= */
+
+app.post("/create-checkout-session", async (req, res) => {
+  try {
+    const { userId, email } = req.body;
+
+    console.log("📩 Checkout request:", { userId, email });
+
+    if (!userId || !email) {
+      return res.status(400).json({ error: "Missing userId or email" });
+    }
+
+    const session = await stripe.checkout.sessions.create({
+      mode: "subscription",
+      customer_creation: "always",
+
+      payment_method_types: ["card"],
+
+      line_items: [
+        {
+          price: "price_1TKQiIJyuWLk753BC9ROUYaU",
+          quantity: 1,
+        },
+      ],
+
+      customer_email: email,
+
+      success_url: `${process.env.FRONTEND_URL}/dashboard`,
+      cancel_url: `${process.env.FRONTEND_URL}/payment`,
+
+      metadata: { userId },
+    });
+
+    console.log("✅ Session created:", session.id);
+
+    res.json({ url: session.url });
+
+  } catch (error) {
+    console.error("🔥 Checkout error:", error.message);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/* ================= BILLING PORTAL ================= */
+
+app.post("/create-portal-session", async (req, res) => {
+  try {
+    const { userId } = req.body;
+
+    const userDoc = await db.collection("users").doc(userId).get();
+
+    if (!userDoc.exists) {
+      return res.status(404).json({ error: "User not found" });
+    }
+
+    const userData = userDoc.data();
+
+    console.log("🔥 USER DATA:", userData);
+
+    if (!userData.stripeCustomerId) {
+      return res.status(400).json({ error: "No Stripe customer ID found" });
+    }
+
+    const session = await stripe.billingPortal.sessions.create({
+      customer: userData.stripeCustomerId,
+      return_url: `${process.env.FRONTEND_URL}/dashboard`,
+    });
+
+    console.log("✅ Portal session created");
+
+    res.json({ url: session.url });
+
+  } catch (error) {
+    console.error("🔥 Portal error:", error.message);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/* ================= TEST ================= */
 
 app.get("/", (req, res) => {
   res.send("Backend working ✅");
 });
 
-/* ================================
-   🚀 START SERVER
-================================ */
+/* ================= START ================= */
 
 const PORT = process.env.PORT || 4242;
 

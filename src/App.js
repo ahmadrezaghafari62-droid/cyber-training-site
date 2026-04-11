@@ -3,8 +3,9 @@ import { useEffect } from "react";
 
 import { auth, db } from "./firebase";
 import { onAuthStateChanged } from "firebase/auth";
-import { doc, setDoc } from "firebase/firestore";
+import { doc, setDoc, getDoc } from "firebase/firestore";
 
+/* PAGES */
 import Home from "./Home";
 import Login from "./Login";
 import Signup from "./Signup";
@@ -13,6 +14,8 @@ import Admin from "./Admin";
 import Payment from "./Payment";
 import Training from "./Training";
 import Contact from "./Contact";
+
+/* ROUTE GUARDS */
 import ProtectedRoute from "./ProtectedRoute";
 import PaymentRoute from "./PaymentRoute";
 
@@ -20,23 +23,38 @@ function App() {
 
   /* ================================
      🔥 CREATE USER IN FIRESTORE
-  ================================ */
+  ================================= */
 
   const createUserIfNotExists = async (user) => {
     if (!user) return;
 
     try {
-      await setDoc(
-        doc(db, "users", user.uid),
-        {
-          email: user.email,
-          isSubscribed: false,
-          createdAt: new Date(),
-        },
-        { merge: true }
-      );
+      const userRef = doc(db, "users", user.uid);
+      const userSnap = await getDoc(userRef);
 
-      console.log("✅ User ensured in Firestore");
+      if (!userSnap.exists()) {
+        await setDoc(
+          userRef,
+          {
+            email: user.email,
+            isSubscribed: false,
+            trialActive: true,
+            createdAt: new Date(),
+          },
+          { merge: true }
+        );
+
+        console.log("✅ New user created with trial");
+      } else {
+        // Ensure trialActive exists
+        await setDoc(
+          userRef,
+          { trialActive: true },
+          { merge: true }
+        );
+
+        console.log("🔄 Existing user updated");
+      }
 
     } catch (error) {
       console.error("🔥 Firestore error:", error.message);
@@ -44,8 +62,8 @@ function App() {
   };
 
   /* ================================
-     🔥 AUTH LISTENER
-  ================================ */
+     🔐 AUTH LISTENER
+  ================================= */
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (user) => {
@@ -59,18 +77,21 @@ function App() {
 
   /* ================================
      🚀 ROUTES
-  ================================ */
+  ================================= */
 
   return (
     <Routes>
 
-      {/* Public صفحات */}
+      {/* PUBLIC ROUTES */}
       <Route path="/" element={<Home />} />
       <Route path="/login" element={<Login />} />
       <Route path="/signup" element={<Signup />} />
       <Route path="/contact" element={<Contact />} />
 
-      {/* Protected Dashboard */}
+      {/* PAYMENT */}
+      <Route path="/payment" element={<Payment />} />
+
+      {/* PROTECTED DASHBOARD */}
       <Route
         path="/dashboard"
         element={
@@ -80,12 +101,9 @@ function App() {
         }
       />
 
-      {/* Payment Page (logged users only ideally) */}
-      <Route path="/payment" element={<Payment />} />
-
-      {/* Training (PAYMENT LOCKED) */}
+      {/* TRAINING (REQUIRES PAYMENT OR TRIAL) */}
       <Route
-        path="/training"
+        path="/training/:courseId"
         element={
           <PaymentRoute>
             <Training />
@@ -93,8 +111,11 @@ function App() {
         }
       />
 
-      {/* Admin (optional protection later) */}
+      {/* ADMIN */}
       <Route path="/admin" element={<Admin />} />
+
+      {/* FALLBACK (OPTIONAL BUT GOOD PRACTICE) */}
+      <Route path="*" element={<Home />} />
 
     </Routes>
   );

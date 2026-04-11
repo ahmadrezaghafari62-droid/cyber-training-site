@@ -1,140 +1,319 @@
+import { useEffect, useState } from "react";
 import { auth, db } from "./firebase";
 import { signOut, onAuthStateChanged } from "firebase/auth";
 import { useNavigate } from "react-router-dom";
-import { doc, getDoc } from "firebase/firestore";
-import { useEffect, useState } from "react";
+import { doc, onSnapshot, setDoc } from "firebase/firestore";
 
 function Dashboard() {
   const navigate = useNavigate();
 
   const [user, setUser] = useState(null);
   const [progress, setProgress] = useState({});
+  const [userData, setUserData] = useState(null);
+  const [loading, setLoading] = useState(true);
 
-  // 🔥 WAIT FOR AUTH PROPERLY
+  const API_URL = "https://cybersentinel-backend-ezpt.onrender.com";
+
+  /* ================= LOAD USER ================= */
+
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
-      if (!currentUser) return;
+    let unsubUser;
+    let unsubProgress;
+
+    const unsubAuth = onAuthStateChanged(auth, (currentUser) => {
+      if (!currentUser) {
+        navigate("/login");
+        return;
+      }
 
       setUser(currentUser);
 
-      try {
-        const docRef = doc(db, "progress", currentUser.uid);
-        const docSnap = await getDoc(docRef);
+      /* 🔥 USER DATA */
+      const userRef = doc(db, "users", currentUser.uid);
 
-        if (docSnap.exists()) {
-          setProgress(docSnap.data());
+      unsubUser = onSnapshot(userRef, (snap) => {
+        if (snap.exists()) {
+          const data = snap.data();
+          console.log("🔥 USER DATA:", data);
+          setUserData(data);
         } else {
-          console.log("No progress yet");
+          console.log("⚠️ No user doc yet");
         }
+      });
 
-      } catch (error) {
-        console.log("🔥 Dashboard error:", error.message);
-      }
+      /* 🔥 PROGRESS */
+      const progressRef = doc(db, "progress", currentUser.uid);
+
+      unsubProgress = onSnapshot(
+        progressRef,
+        async (snap) => {
+          if (snap.exists()) {
+            setProgress(snap.data());
+          } else {
+            const defaultProgress = {
+              phishing: { score: 0, total: 5 },
+              passwords: { score: 0, total: 5 },
+              social: { score: 0, total: 5 },
+            };
+
+            await setDoc(progressRef, defaultProgress);
+            setProgress(defaultProgress);
+          }
+
+          setLoading(false);
+        },
+        (err) => {
+          console.error("🔥 Firestore error:", err);
+          setLoading(false);
+        }
+      );
     });
 
-    return () => unsubscribe();
-  }, []);
+    return () => {
+      unsubAuth();
+      if (unsubUser) unsubUser();
+      if (unsubProgress) unsubProgress();
+    };
+  }, [navigate]);
 
-  const logout = async () => {
+  /* ================= RISK SCORE ================= */
+
+  let totalScore = 0;
+  let totalPossible = 0;
+
+  Object.values(progress || {}).forEach((course) => {
+    if (!course?.score || !course?.total) return;
+    totalScore += course.score;
+    totalPossible += course.total;
+  });
+
+  const avg =
+    totalPossible > 0
+      ? Math.round((totalScore / totalPossible) * 100)
+      : 0;
+
+  const isSubscribed = userData?.isSubscribed === true;
+
+  /* ================= ACTIONS ================= */
+
+  const handleLogout = async () => {
     await signOut(auth);
     navigate("/login");
   };
 
-  const courses = [
-    "Phishing Awareness",
-    "Password Security",
-    "Social Engineering"
-  ];
+  /* 🔥 STRIPE CHECKOUT */
+  const handleUpgrade = async () => {
+    console.log("🚀 Upgrade clicked");
+
+    try {
+      const res = await fetch(`${API_URL}/create-checkout-session`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          userId: user.uid,
+          email: user.email,
+        }),
+      });
+
+      const data = await res.json();
+
+      console.log("🔥 Checkout response:", data);
+
+      if (data.url) {
+        window.location.href = data.url;
+      } else {
+        throw new Error("No checkout URL");
+      }
+    } catch (err) {
+      console.error("❌ Checkout error:", err);
+      alert("Payment failed. Check console.");
+    }
+  };
+
+  /* 🔥 BILLING PORTAL */
+  const handleManageSubscription = async () => {
+    try {
+      const res = await fetch(`${API_URL}/create-portal-session`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          userId: user.uid,
+        }),
+      });
+
+      const data = await res.json();
+
+      console.log("🔥 Portal response:", data);
+
+      if (data.url) {
+        window.location.href = data.url;
+      } else {
+        throw new Error("No portal URL");
+      }
+    } catch (err) {
+      console.error("❌ Portal error:", err);
+      alert("Failed to open billing portal");
+    }
+  };
+
+  /* ================= LOADING ================= */
+
+  if (loading) {
+    return (
+      <div style={styles.center}>
+        <p>Loading dashboard...</p>
+      </div>
+    );
+  }
+
+  if (!user) {
+    return (
+      <div style={styles.center}>
+        <p>Authenticating...</p>
+      </div>
+    );
+  }
+
+  /* ================= UI ================= */
 
   return (
-    <div style={{
-      background: "#020617",
-      minHeight: "100vh",
-      color: "white",
-      padding: "40px"
-    }}>
-      <h1 style={{ textAlign: "center" }}>CyberSentinel Dashboard</h1>
-
-      <p style={{ textAlign: "center", color: "#94a3b8" }}>
-        Welcome, {user?.email}
-      </p>
-
-      <h2 style={{ marginTop: "40px" }}>Your Training Modules</h2>
-
-      <div style={{
-        display: "grid",
-        gridTemplateColumns: "repeat(auto-fit, minmax(250px, 1fr))",
-        gap: "20px",
-        marginTop: "20px"
-      }}>
-        {courses.map((course, index) => {
-          const courseData = progress?.courses?.[course];
-
-          return (
-            <div key={index} style={{
-              background: "#0f172a",
-              padding: "20px",
-              borderRadius: "10px"
-            }}>
-              <h3>{course}</h3>
-
-              <div style={{ marginTop: "10px" }}>
-                <div style={{
-                  height: "10px",
-                  background: "#1e293b",
-                  borderRadius: "5px"
-                }}>
-                  <div style={{
-                    width: courseData
-                      ? `${(courseData.score / courseData.total) * 100}%`
-                      : "0%",
-                    height: "100%",
-                    background: "#38bdf8"
-                  }} />
-                </div>
-
-                <p style={{ marginTop: "5px", fontSize: "14px", color: "#94a3b8" }}>
-                  {courseData
-                    ? `Score: ${courseData.score} / ${courseData.total}`
-                    : "Not attempted"}
-                </p>
-              </div>
-
-              <button
-                onClick={() => navigate(`/course/${course}`)}
-                style={{
-                  marginTop: "10px",
-                  padding: "10px",
-                  width: "100%",
-                  background: "#38bdf8",
-                  border: "none",
-                  borderRadius: "5px",
-                  cursor: "pointer"
-                }}
-              >
-                Start Training
-              </button>
-            </div>
-          );
-        })}
-      </div>
-
-      <div style={{ textAlign: "center", marginTop: "40px" }}>
-        <button
-          onClick={logout}
-          style={{
-            padding: "10px 20px",
-            background: "red",
-            border: "none",
-            color: "white",
-            cursor: "pointer"
-          }}
-        >
+    <div style={styles.page}>
+      <div style={styles.header}>
+        <h1>Dashboard</h1>
+        <button onClick={handleLogout} style={styles.logout}>
           Logout
         </button>
+      </div>
+
+      <p style={styles.email}>{user.email}</p>
+
+      <div style={styles.card}>
+        <h2>Risk Score</h2>
+        <h1>{avg}%</h1>
+      </div>
+
+      {/* 🔐 SUBSCRIPTION */}
+      {!isSubscribed ? (
+        <div style={styles.warning}>
+          <h3>🔒 Subscription Required</h3>
+          <p>You need to upgrade to access training.</p>
+
+          <button onClick={handleUpgrade} style={styles.upgradeBtn}>
+            Upgrade Now
+          </button>
+        </div>
+      ) : (
+        <div style={styles.card}>
+          <h3>✅ Subscription Active</h3>
+
+          <button onClick={handleManageSubscription} style={styles.button}>
+            Manage Subscription
+          </button>
+        </div>
+      )}
+
+      {/* 📚 COURSES */}
+      <div style={styles.card}>
+        <h2>Start Your Training</h2>
+
+        <div style={styles.buttonRow}>
+          {["phishing", "passwords", "social"].map((course) => (
+            <button
+              key={course}
+              onClick={() =>
+                isSubscribed
+                  ? navigate(`/training/${course}`)
+                  : handleUpgrade()
+              }
+              style={styles.button}
+            >
+              {course === "phishing"
+                ? "Phishing Awareness"
+                : course === "passwords"
+                ? "Password Security"
+                : "Social Engineering"}
+            </button>
+          ))}
+        </div>
       </div>
     </div>
   );
 }
+
+/* ================= STYLES ================= */
+
+const styles = {
+  page: {
+    background: "#020617",
+    minHeight: "100vh",
+    color: "white",
+    padding: "40px",
+  },
+  center: {
+    background: "#020617",
+    minHeight: "100vh",
+    display: "flex",
+    justifyContent: "center",
+    alignItems: "center",
+    color: "white",
+  },
+  header: {
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "center",
+  },
+  email: {
+    color: "#94a3b8",
+    marginTop: "10px",
+  },
+  card: {
+    marginTop: "30px",
+    padding: "25px",
+    background: "#0f172a",
+    borderRadius: "12px",
+    border: "1px solid #1e293b",
+  },
+  warning: {
+    marginTop: "20px",
+    padding: "20px",
+    background: "#7f1d1d",
+    borderRadius: "10px",
+  },
+  upgradeBtn: {
+    marginTop: "10px",
+    padding: "10px",
+    background: "#38bdf8",
+    border: "none",
+    borderRadius: "6px",
+    cursor: "pointer",
+    color: "white",
+  },
+  buttonRow: {
+    marginTop: "20px",
+    display: "flex",
+    gap: "10px",
+    flexWrap: "wrap",
+  },
+  button: {
+    padding: "12px",
+    background: "#38bdf8",
+    border: "none",
+    borderRadius: "6px",
+    color: "white",
+    cursor: "pointer",
+  },
+  logout: {
+    background: "red",
+    border: "none",
+    padding: "10px 15px",
+    borderRadius: "6px",
+    color: "white",
+    cursor: "pointer",
+  },
+};
 
 export default Dashboard;
