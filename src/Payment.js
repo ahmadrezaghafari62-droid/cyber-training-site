@@ -30,7 +30,6 @@ function Payment() {
         if (userSnap.exists()) {
           const userData = userSnap.data();
 
-          // ✅ Already subscribed → skip payment
           if (userData.isSubscribed) {
             console.log("✅ Already subscribed");
             navigate("/dashboard");
@@ -39,9 +38,8 @@ function Payment() {
         }
 
         setLoading(false);
-
       } catch (err) {
-        console.error("Error checking subscription:", err);
+        console.error("❌ Subscription check error:", err);
         setLoading(false);
       }
     });
@@ -54,17 +52,27 @@ function Payment() {
   ================================= */
 
   const handlePayment = async () => {
+    console.log("🔥 BUTTON CLICKED"); // ✅ DEBUG
+
     const user = auth.currentUser;
+
+    console.log("👤 User object:", user);
 
     if (!user) {
       alert("Please login first");
       return;
     }
 
+    if (!user.email) {
+      alert("User email missing ❌");
+      console.error("❌ Email is undefined");
+      return;
+    }
+
     try {
       setProcessing(true);
 
-      console.log("🚀 Creating Stripe session...");
+      console.log("🚀 Sending request to backend...");
 
       const res = await fetch(`${API_URL}/create-checkout-session`, {
         method: "POST",
@@ -73,17 +81,22 @@ function Payment() {
         },
         body: JSON.stringify({
           userId: user.uid,
+          email: user.email,
         }),
       });
 
+      console.log("📡 Response status:", res.status);
+
       const data = await res.json();
+
+      console.log("📩 Backend response:", data);
 
       if (!res.ok) {
         throw new Error(data.error || "Failed to create session");
       }
 
       if (data.url) {
-        // 🔥 Redirect to Stripe
+        console.log("✅ Redirecting to Stripe...");
         window.location.href = data.url;
       } else {
         throw new Error("No checkout URL returned");
@@ -91,7 +104,7 @@ function Payment() {
 
     } catch (error) {
       console.error("❌ Payment error:", error.message);
-      alert("Payment failed. Please try again.");
+      alert("Payment failed. Check console.");
       setProcessing(false);
     }
   };

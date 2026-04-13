@@ -54,13 +54,12 @@ app.use(cors({
   credentials: true
 }));
 
-/* ================= WEBHOOK (CRITICAL) ================= */
+/* ================= WEBHOOK ================= */
 
 app.post("/webhook", express.raw({ type: "application/json" }), async (req, res) => {
   console.log("🚨 WEBHOOK HIT");
 
   const sig = req.headers["stripe-signature"];
-
   let event;
 
   try {
@@ -81,7 +80,6 @@ app.post("/webhook", express.raw({ type: "application/json" }), async (req, res)
 
       case "checkout.session.completed": {
         const session = event.data.object;
-
         const userId = session.metadata?.userId;
 
         console.log("🔥 USER ID:", userId);
@@ -164,15 +162,27 @@ app.post("/create-checkout-session", async (req, res) => {
   try {
     const { userId, email } = req.body;
 
-    console.log("📩 Checkout request:", { userId, email });
+    console.log("📩 Incoming checkout request:");
+    console.log("➡️ userId:", userId);
+    console.log("➡️ email:", email);
 
     if (!userId || !email) {
+      console.log("❌ Missing userId or email");
       return res.status(400).json({ error: "Missing userId or email" });
     }
 
+    if (!process.env.STRIPE_SECRET_KEY) {
+      console.log("❌ STRIPE_SECRET_KEY missing");
+    }
+
+    if (!process.env.FRONTEND_URL) {
+      console.log("❌ FRONTEND_URL missing");
+    }
+
+    console.log("🚀 Creating Stripe session...");
+
     const session = await stripe.checkout.sessions.create({
       mode: "subscription",
-      customer_creation: "always",
 
       payment_method_types: ["card"],
 
@@ -191,13 +201,26 @@ app.post("/create-checkout-session", async (req, res) => {
       metadata: { userId },
     });
 
-    console.log("✅ Session created:", session.id);
+    console.log("✅ Stripe session created:");
+    console.log("➡️ Session ID:", session.id);
+    console.log("➡️ URL:", session.url);
+
+    if (!session.url) {
+      console.log("❌ No URL returned from Stripe");
+      return res.status(500).json({ error: "No checkout URL returned" });
+    }
 
     res.json({ url: session.url });
 
   } catch (error) {
-    console.error("🔥 Checkout error:", error.message);
-    res.status(500).json({ error: error.message });
+    console.error("🔥 FULL STRIPE ERROR:");
+    console.error(error); // 🔥 FULL ERROR OBJECT
+
+    res.status(500).json({
+      error: error.message,
+      type: error.type,
+      code: error.code,
+    });
   }
 });
 
@@ -215,8 +238,6 @@ app.post("/create-portal-session", async (req, res) => {
 
     const userData = userDoc.data();
 
-    console.log("🔥 USER DATA:", userData);
-
     if (!userData.stripeCustomerId) {
       return res.status(400).json({ error: "No Stripe customer ID found" });
     }
@@ -225,8 +246,6 @@ app.post("/create-portal-session", async (req, res) => {
       customer: userData.stripeCustomerId,
       return_url: `${process.env.FRONTEND_URL}/dashboard`,
     });
-
-    console.log("✅ Portal session created");
 
     res.json({ url: session.url });
 
