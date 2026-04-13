@@ -26,7 +26,7 @@ function Dashboard() {
         return;
       }
 
-      setUser(currentUser);
+      setUser(currentUser); // ✅ FIXED
 
       /* 🔥 USER DATA */
       const userRef = doc(db, "users", currentUser.uid);
@@ -36,8 +36,6 @@ function Dashboard() {
           const data = snap.data();
           console.log("🔥 USER DATA:", data);
           setUserData(data);
-        } else {
-          console.log("⚠️ No user doc yet");
         }
       });
 
@@ -105,6 +103,11 @@ function Dashboard() {
   const handleUpgrade = async () => {
     console.log("🚀 Upgrade clicked");
 
+    if (!user) {
+      alert("User not loaded yet");
+      return;
+    }
+
     try {
       const res = await fetch(`${API_URL}/create-checkout-session`, {
         method: "POST",
@@ -117,18 +120,25 @@ function Dashboard() {
         }),
       });
 
+      console.log("🔥 STATUS:", res.status);
+
       const data = await res.json();
 
-      console.log("🔥 Checkout response:", data);
+      console.log("🔥 RESPONSE:", data);
 
-      if (data.url) {
-        window.location.href = data.url;
-      } else {
+      if (!res.ok) {
+        throw new Error(data?.error || "Checkout failed");
+      }
+
+      if (!data.url) {
         throw new Error("No checkout URL");
       }
+
+      window.location.href = data.url;
+
     } catch (err) {
       console.error("❌ Checkout error:", err);
-      alert("Payment failed. Check console.");
+      alert(`Payment failed:\n\n${err.message}`);
     }
   };
 
@@ -147,13 +157,12 @@ function Dashboard() {
 
       const data = await res.json();
 
-      console.log("🔥 Portal response:", data);
-
-      if (data.url) {
-        window.location.href = data.url;
-      } else {
+      if (!data.url) {
         throw new Error("No portal URL");
       }
+
+      window.location.href = data.url;
+
     } catch (err) {
       console.error("❌ Portal error:", err);
       alert("Failed to open billing portal");
@@ -196,7 +205,6 @@ function Dashboard() {
         <h1>{avg}%</h1>
       </div>
 
-      {/* 🔐 SUBSCRIPTION */}
       {!isSubscribed ? (
         <div style={styles.warning}>
           <h3>🔒 Subscription Required</h3>
@@ -216,7 +224,6 @@ function Dashboard() {
         </div>
       )}
 
-      {/* 📚 COURSES */}
       <div style={styles.card}>
         <h2>Start Your Training</h2>
 

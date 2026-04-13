@@ -7,6 +7,7 @@ import { doc, getDoc } from "firebase/firestore";
 function Payment() {
   const [loading, setLoading] = useState(true);
   const [processing, setProcessing] = useState(false);
+  const [user, setUser] = useState(null);
 
   const navigate = useNavigate();
 
@@ -22,6 +23,8 @@ function Payment() {
         navigate("/login");
         return;
       }
+
+      setUser(currentUser); // ✅ IMPORTANT
 
       try {
         const userRef = doc(db, "users", currentUser.uid);
@@ -48,69 +51,51 @@ function Payment() {
   }, [navigate]);
 
   /* ================================
-     💳 CREATE CHECKOUT SESSION
+     💳 HANDLE PAYMENT
   ================================= */
 
-  const handlePayment = async () => {
-    console.log("🔥 BUTTON CLICKED"); // ✅ DEBUG
+ const handleUpgrade = async () => {
+  console.log("🚀 Upgrade clicked");
 
-    const user = auth.currentUser;
+  if (!user) {
+    alert("User not loaded yet");
+    return;
+  }
 
-    console.log("👤 User object:", user);
+  try {
+    const res = await fetch(`${API_URL}/create-checkout-session`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        userId: user.uid,
+        email: user.email,
+      }),
+    });
 
-    if (!user) {
-      alert("Please login first");
-      return;
+    const data = await res.json();
+
+    console.log("🔥 Checkout response:", data);
+
+    if (!res.ok) {
+      throw new Error(data?.error || "Checkout failed");
     }
 
-    if (!user.email) {
-      alert("User email missing ❌");
-      console.error("❌ Email is undefined");
-      return;
+    if (!data.url) {
+      throw new Error("No checkout URL");
     }
 
-    try {
-      setProcessing(true);
+    window.location.href = data.url;
 
-      console.log("🚀 Sending request to backend...");
-
-      const res = await fetch(`${API_URL}/create-checkout-session`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          userId: user.uid,
-          email: user.email,
-        }),
-      });
-
-      console.log("📡 Response status:", res.status);
-
-      const data = await res.json();
-
-      console.log("📩 Backend response:", data);
-
-      if (!res.ok) {
-        throw new Error(data.error || "Failed to create session");
-      }
-
-      if (data.url) {
-        console.log("✅ Redirecting to Stripe...");
-        window.location.href = data.url;
-      } else {
-        throw new Error("No checkout URL returned");
-      }
-
-    } catch (error) {
-      console.error("❌ Payment error:", error.message);
-      alert("Payment failed. Check console.");
-      setProcessing(false);
-    }
-  };
+  } catch (err) {
+    console.error("❌ Checkout error:", err);
+    alert(err.message);
+  }
+};
 
   /* ================================
-     ⏳ LOADING STATE
+     ⏳ LOADING
   ================================= */
 
   if (loading) {
@@ -133,7 +118,7 @@ function Payment() {
         <p style={styles.price}>£5 / user / month</p>
 
         <button
-          onClick={handlePayment}
+          onClick={handleUpgrade} // ✅ FIXED
           disabled={processing}
           style={{
             ...styles.button,
