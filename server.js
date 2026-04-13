@@ -10,6 +10,10 @@ const app = express();
 
 /* ================= FIREBASE ================= */
 
+if (!process.env.FIREBASE_KEY) {
+  throw new Error("❌ FIREBASE_KEY missing in env");
+}
+
 const serviceAccount = JSON.parse(process.env.FIREBASE_KEY);
 
 admin.initializeApp({
@@ -57,9 +61,8 @@ app.use(cors({
 /* ================= WEBHOOK ================= */
 
 app.post("/webhook", express.raw({ type: "application/json" }), async (req, res) => {
-  console.log("🚨 WEBHOOK HIT");
-
   const sig = req.headers["stripe-signature"];
+
   let event;
 
   try {
@@ -82,8 +85,6 @@ app.post("/webhook", express.raw({ type: "application/json" }), async (req, res)
         const session = event.data.object;
         const userId = session.metadata?.userId;
 
-        console.log("🔥 USER ID:", userId);
-
         if (!userId) break;
 
         await db.collection("users").doc(userId).set({
@@ -94,8 +95,6 @@ app.post("/webhook", express.raw({ type: "application/json" }), async (req, res)
           updatedAt: new Date(),
         }, { merge: true });
 
-        console.log("✅ Firestore updated");
-
         const userDoc = await db.collection("users").doc(userId).get();
 
         if (userDoc.exists) {
@@ -105,6 +104,7 @@ app.post("/webhook", express.raw({ type: "application/json" }), async (req, res)
           );
         }
 
+        console.log("✅ Subscription activated:", userId);
         break;
       }
 
@@ -115,12 +115,12 @@ app.post("/webhook", express.raw({ type: "application/json" }), async (req, res)
           .where("subscriptionId", "==", subscription.id)
           .get();
 
-        for (const docSnap of users.docs) {
-          await docSnap.ref.update({
+        users.forEach(docSnap => {
+          docSnap.ref.update({
             isSubscribed: false,
             subscriptionStatus: "cancelled",
           });
-        }
+        });
 
         break;
       }
@@ -132,11 +132,11 @@ app.post("/webhook", express.raw({ type: "application/json" }), async (req, res)
           .where("stripeCustomerId", "==", invoice.customer)
           .get();
 
-        for (const docSnap of users.docs) {
-          await docSnap.ref.update({
+        users.forEach(docSnap => {
+          docSnap.ref.update({
             subscriptionStatus: "past_due",
           });
-        }
+        });
 
         break;
       }
@@ -146,13 +146,13 @@ app.post("/webhook", express.raw({ type: "application/json" }), async (req, res)
     }
 
   } catch (error) {
-    console.error("🔥 Webhook processing error:", error.message);
+    console.error("🔥 Webhook error:", error.message);
   }
 
   res.sendStatus(200);
 });
 
-/* ================= JSON AFTER WEBHOOK ================= */
+/* ================= JSON PARSER ================= */
 
 app.use(express.json());
 
@@ -162,24 +162,15 @@ app.post("/create-checkout-session", async (req, res) => {
   try {
     const { userId, email } = req.body;
 
-    console.log("📩 Incoming checkout request:");
-    console.log("➡️ userId:", userId);
-    console.log("➡️ email:", email);
+    console.log("📩 Request:", { userId, email });
 
     if (!userId || !email) {
-      console.log("❌ Missing userId or email");
       return res.status(400).json({ error: "Missing userId or email" });
     }
 
-    if (!process.env.STRIPE_SECRET_KEY) {
-      console.log("❌ STRIPE_SECRET_KEY missing");
-    }
-
     if (!process.env.FRONTEND_URL) {
-      console.log("❌ FRONTEND_URL missing");
+      throw new Error("FRONTEND_URL is not set");
     }
-
-    console.log("🚀 Creating Stripe session...");
 
     const session = await stripe.checkout.sessions.create({
       mode: "subscription",
@@ -188,7 +179,7 @@ app.post("/create-checkout-session", async (req, res) => {
 
       line_items: [
         {
-          price: "price_1TKQiIJyuWLk753BC9ROUYaU",
+          price: "price_1TKQiIJyuWLk753BC9ROUYaU", // ✅ your price
           quantity: 1,
         },
       ],
@@ -201,20 +192,12 @@ app.post("/create-checkout-session", async (req, res) => {
       metadata: { userId },
     });
 
-    console.log("✅ Stripe session created:");
-    console.log("➡️ Session ID:", session.id);
-    console.log("➡️ URL:", session.url);
-
-    if (!session.url) {
-      console.log("❌ No URL returned from Stripe");
-      return res.status(500).json({ error: "No checkout URL returned" });
-    }
+    console.log("✅ Checkout created:", session.id);
 
     res.json({ url: session.url });
 
   } catch (error) {
-    console.error("🔥 FULL STRIPE ERROR:");
-    console.error(error); // 🔥 FULL ERROR OBJECT
+    console.error("🔥 Stripe Error:", error);
 
     res.status(500).json({
       error: error.message,
@@ -239,7 +222,7 @@ app.post("/create-portal-session", async (req, res) => {
     const userData = userDoc.data();
 
     if (!userData.stripeCustomerId) {
-      return res.status(400).json({ error: "No Stripe customer ID found" });
+      return res.status(400).json({ error: "No Stripe customer ID" });
     }
 
     const session = await stripe.billingPortal.sessions.create({
@@ -250,12 +233,12 @@ app.post("/create-portal-session", async (req, res) => {
     res.json({ url: session.url });
 
   } catch (error) {
-    console.error("🔥 Portal error:", error.message);
+    console.error("🔥 Portal Error:", error.message);
     res.status(500).json({ error: error.message });
   }
 });
 
-/* ================= TEST ================= */
+/* ================= HEALTH CHECK ================= */
 
 app.get("/", (req, res) => {
   res.send("Backend working ✅");
