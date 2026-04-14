@@ -4,6 +4,7 @@ const express = require("express");
 const cors = require("cors");
 const stripe = require("stripe")(process.env.STRIPE_SECRET_KEY);
 const admin = require("firebase-admin");
+console.log("🔥 DEPLOY VERSION 3");
 console.log("🔥 NEW DEPLOY ACTIVE - PRICE FIXED");
 const nodemailer = require("nodemailer");
 
