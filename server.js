@@ -4,6 +4,7 @@ const express = require("express");
 const cors = require("cors");
 const stripe = require("stripe")(process.env.STRIPE_SECRET_KEY);
 const admin = require("firebase-admin");
+console.log("🔥 NEW DEPLOY ACTIVE - PRICE FIXED");
 const nodemailer = require("nodemailer");
 
 const app = express();
@@ -75,7 +76,7 @@ app.post("/webhook", express.raw({ type: "application/json" }), async (req, res)
     console.error("❌ Webhook signature failed:", err.message);
     return res.sendStatus(400);
   }
-
+  console.log("🔥 STRIPE KEY:", process.env.STRIPE_SECRET_KEY);
   console.log("🔔 Stripe event:", event.type);
 
   try {
@@ -179,7 +180,7 @@ app.post("/create-checkout-session", async (req, res) => {
 
       line_items: [
         {
-          price: "price_1TLkI2JyuWLk753BOYdILrmd", // ✅ your price
+          price: "price_1TJbh6JyuWLk753BJcDnnHCZ", // ✅ your price
           quantity: 1,
         },
       ],
