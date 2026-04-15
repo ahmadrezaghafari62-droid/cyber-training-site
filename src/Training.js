@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useState, useEffect } from "react";
 import { auth, db } from "./firebase";
 import { doc, setDoc, arrayUnion } from "firebase/firestore";
 import { useParams, useNavigate } from "react-router-dom";
@@ -10,6 +10,20 @@ function Training() {
   const [step, setStep] = useState(0);
   const [score, setScore] = useState(0);
   const [completed, setCompleted] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [selectedAnswer, setSelectedAnswer] = useState(null);
+
+  /* ================= AUTO REDIRECT AFTER COMPLETION ================= */
+
+  useEffect(() => {
+    if (completed) {
+      const timer = setTimeout(() => {
+        navigate("/dashboard");
+      }, 2000);
+
+      return () => clearTimeout(timer);
+    }
+  }, [completed, navigate]);
 
   /* ================= COURSE DATA ================= */
 
@@ -18,28 +32,28 @@ function Training() {
       {
         question: "What is phishing?",
         options: ["Fishing emails", "Cyber attack", "Antivirus"],
-        answer: "Cyber attack"
+        answer: "Cyber attack",
       },
       {
         question: "Phishing emails usually:",
         options: ["Look suspicious", "Look legitimate", "Are safe"],
-        answer: "Look legitimate"
-      }
+        answer: "Look legitimate",
+      },
     ],
     passwords: [
       {
         question: "Strong password includes:",
         options: ["123456", "Name only", "Letters, numbers & symbols"],
-        answer: "Letters, numbers & symbols"
-      }
+        answer: "Letters, numbers & symbols",
+      },
     ],
     social: [
       {
         question: "Social engineering is:",
         options: ["Hacking people", "Fixing computers", "Coding"],
-        answer: "Hacking people"
-      }
-    ]
+        answer: "Hacking people",
+      },
+    ],
   };
 
   const questions = courseContent[courseId] || [];
@@ -47,6 +61,10 @@ function Training() {
   /* ================= HANDLE ANSWER ================= */
 
   const handleAnswer = async (selected) => {
+    if (selectedAnswer) return;
+
+    setSelectedAnswer(selected);
+
     let newScore = score;
 
     if (selected === questions[step].answer) {
@@ -54,56 +72,66 @@ function Training() {
       setScore(newScore);
     }
 
+    // Small UX delay
+    await new Promise((res) => setTimeout(res, 400));
+
     const next = step + 1;
 
     if (next < questions.length) {
       setStep(next);
-    } else {
-      const user = auth.currentUser;
-      if (!user) return;
+      setSelectedAnswer(null);
+      return;
+    }
 
-      try {
-        // ✅ SAVE RESULT + HISTORY
-        await setDoc(
-          doc(db, "progress", user.uid),
-          {
-            [courseId]: {
-              score: newScore,
-              total: questions.length
-            },
+    // 🔥 FINAL STEP — SAVE TO FIRESTORE
+    const user = auth.currentUser;
+    if (!user) return;
 
-            history: arrayUnion({
-              courseId,
-              date: new Date().toISOString(),
-              score: newScore,
-              total: questions.length
-            })
+    setSaving(true);
+
+    try {
+      await setDoc(
+        doc(db, "progress", user.uid),
+        {
+          [courseId]: {
+            score: newScore,
+            total: questions.length,
           },
-          { merge: true }
-        );
+          history: arrayUnion({
+            courseId,
+            date: new Date().toISOString(),
+            score: newScore,
+            total: questions.length,
+          }),
+        },
+        { merge: true }
+      );
 
-        console.log("✅ Progress saved");
+      console.log("🔥 SAVED:", {
+        courseId,
+        score: newScore,
+        total: questions.length,
+      });
 
-      } catch (err) {
-        console.error("🔥 Save error:", err.message);
-      }
-
+      // ✅ TRIGGER COMPLETION SCREEN
       setCompleted(true);
 
-      setTimeout(() => {
-        navigate("/dashboard");
-      }, 1500);
+    } catch (err) {
+      console.error("🔥 Save error:", err.message);
+      setSaving(false);
     }
   };
 
-  /* ================= COMPLETION ================= */
+  /* ================= COMPLETION SCREEN ================= */
 
   if (completed) {
     return (
-      <div style={{ padding: "40px", color: "white" }}>
-        <h2>🎉 Course Completed</h2>
-        <p>Your score: {score} / {questions.length}</p>
-        <p>Redirecting...</p>
+      <div style={styles.center}>
+        <h1>🎉 Course Completed!</h1>
+        <p>
+          Your score: {score} / {questions.length}
+        </p>
+        <p>{saving ? "Saving progress..." : "Redirecting..."}</p>
       </div>
     );
   }
@@ -111,38 +139,42 @@ function Training() {
   /* ================= NO COURSE ================= */
 
   if (!questions.length) {
-    return <p style={{ color: "white" }}>No course found</p>;
+    return (
+      <div style={styles.center}>
+        <p>No course found</p>
+      </div>
+    );
   }
 
   /* ================= UI ================= */
 
   return (
-    <div style={{
-      background: "#020617",
-      minHeight: "100vh",
-      color: "white",
-      padding: "40px"
-    }}>
+    <div style={styles.page}>
       <h2>{questions[step].question}</h2>
 
-      {questions[step].options.map((opt, i) => (
-        <button
-          key={i}
-          onClick={() => handleAnswer(opt)}
-          style={{
-            display: "block",
-            margin: "10px 0",
-            padding: "10px",
-            width: "300px",
-            background: "#38bdf8",
-            border: "none",
-            borderRadius: "5px",
-            cursor: "pointer"
-          }}
-        >
-          {opt}
-        </button>
-      ))}
+      {questions[step].options.map((opt, i) => {
+        const isCorrect = opt === questions[step].answer;
+        const isSelected = selectedAnswer === opt;
+
+        return (
+          <button
+            key={i}
+            onClick={() => handleAnswer(opt)}
+            disabled={!!selectedAnswer}
+            style={{
+              ...styles.button,
+              background: isSelected
+                ? isCorrect
+                  ? "#22c55e"
+                  : "#ef4444"
+                : "#38bdf8",
+              opacity: selectedAnswer && !isSelected ? 0.6 : 1,
+            }}
+          >
+            {opt}
+          </button>
+        );
+      })}
 
       <p style={{ marginTop: "20px" }}>
         Question {step + 1} of {questions.length}
@@ -150,5 +182,36 @@ function Training() {
     </div>
   );
 }
+
+/* ================= STYLES ================= */
+
+const styles = {
+  page: {
+    background: "#020617",
+    minHeight: "100vh",
+    color: "white",
+    padding: "40px",
+  },
+  center: {
+    background: "#020617",
+    minHeight: "100vh",
+    display: "flex",
+    flexDirection: "column",
+    justifyContent: "center",
+    alignItems: "center",
+    color: "white",
+  },
+  button: {
+    display: "block",
+    margin: "10px 0",
+    padding: "12px",
+    width: "300px",
+    border: "none",
+    borderRadius: "6px",
+    cursor: "pointer",
+    color: "white",
+    fontWeight: "bold",
+  },
+};
 
 export default Training;

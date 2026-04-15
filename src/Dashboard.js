@@ -76,7 +76,7 @@ function Dashboard() {
   let totalPossible = 0;
 
   Object.values(progress || {}).forEach((course) => {
-    if (!course?.score || !course?.total) return;
+  if (course?.score === undefined || course?.total === undefined) return;
     totalScore += course.score;
     totalPossible += course.total;
   });
@@ -85,6 +85,10 @@ function Dashboard() {
     totalPossible > 0
       ? Math.round((totalScore / totalPossible) * 100)
       : 0;
+
+  let riskLevel = "Low";
+  if (avg < 40) riskLevel = "High";
+  else if (avg < 70) riskLevel = "Medium";
 
   const isSubscribed = userData?.isSubscribed === true;
 
@@ -165,7 +169,7 @@ function Dashboard() {
     );
   }
 
-  /* ================= 🔒 LOCK (MAIN CHANGE) ================= */
+  /* ================= 🔒 LOCK ================= */
 
   if (!isSubscribed) {
     return (
@@ -209,11 +213,38 @@ function Dashboard() {
 
       <p style={styles.email}>{user.email}</p>
 
+      {/* 🔥 RISK CARD */}
       <div style={styles.card}>
         <h2>Risk Score</h2>
         <h1>{avg}%</h1>
+
+        <p
+          style={{
+            color:
+              riskLevel === "High"
+                ? "#ef4444"
+                : riskLevel === "Medium"
+                ? "#f59e0b"
+                : "#22c55e",
+          }}
+        >
+          {riskLevel} Risk
+        </p>
+
+        {/* ✅ COMPLETION MESSAGE */}
+        {avg >= 100 && (
+  <div style={{ marginTop: "15px" }}>
+    <p style={{ color: "#22c55e", fontWeight: "bold" }}>
+      🎉 Training Complete!
+    </p>
+    <p style={{ color: "#94a3b8" }}>
+      You’ve mastered all modules. Great job.
+    </p>
+  </div>
+)}
       </div>
 
+      {/* 🔥 SUBSCRIPTION */}
       <div style={styles.card}>
         <h3>✅ Subscription Active</h3>
 
@@ -222,8 +253,27 @@ function Dashboard() {
         </button>
       </div>
 
+      {/* 🔥 TRAINING */}
       <div style={styles.card}>
         <h2>Start Your Training</h2>
+
+        {/* 🔥 BREAKDOWN */}
+        <div style={{ marginTop: "20px" }}>
+          <h3>📊 Performance Breakdown</h3>
+
+          {Object.entries(progress).map(([key, value]) => {
+            const percent =
+              value.total > 0
+                ? Math.round((value.score / value.total) * 100)
+                : 0;
+
+            return (
+              <div key={key} style={{ marginTop: "10px" }}>
+                <strong>{key}</strong>: {percent}%
+              </div>
+            );
+          })}
+        </div>
 
         <div style={styles.buttonRow}>
           {["phishing", "passwords", "social"].map((course) => (
