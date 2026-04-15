@@ -13,17 +13,17 @@ function Training() {
   const [saving, setSaving] = useState(false);
   const [selectedAnswer, setSelectedAnswer] = useState(null);
 
-  console.log("🔥 TRAINING VERSION FINAL");
+  console.log("🔁 Training render:", { completed });
 
   /* ================= AUTO REDIRECT ================= */
 
   useEffect(() => {
     if (completed) {
-      console.log("🎉 COMPLETION SCREEN RENDERED");
+      console.log("🎉 COMPLETION SCREEN SHOWN");
 
       const timer = setTimeout(() => {
         navigate("/dashboard");
-      }, 2000);
+      }, 3000); // give enough time to SEE it
 
       return () => clearTimeout(timer);
     }
@@ -110,7 +110,7 @@ function Training() {
 
       console.log("✅ Progress saved");
 
-      // ✅ TRIGGER COMPLETION UI
+      // 🔥 THIS TRIGGERS UI FIRST
       setCompleted(true);
 
     } catch (err) {
