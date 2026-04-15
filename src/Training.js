@@ -1,4 +1,3 @@
-console.log("🔥 TRAINING VERSION FIXED V2");
 import { useState, useEffect } from "react";
 import { auth, db } from "./firebase";
 import { doc, setDoc, arrayUnion } from "firebase/firestore";
@@ -14,10 +13,14 @@ function Training() {
   const [saving, setSaving] = useState(false);
   const [selectedAnswer, setSelectedAnswer] = useState(null);
 
-  /* ================= AUTO REDIRECT AFTER COMPLETION ================= */
+  console.log("🔥 TRAINING VERSION FINAL");
+
+  /* ================= AUTO REDIRECT ================= */
 
   useEffect(() => {
     if (completed) {
+      console.log("🎉 COMPLETION SCREEN RENDERED");
+
       const timer = setTimeout(() => {
         navigate("/dashboard");
       }, 2000);
@@ -73,9 +76,6 @@ function Training() {
       setScore(newScore);
     }
 
-    // Small UX delay
-    await new Promise((res) => setTimeout(res, 400));
-
     const next = step + 1;
 
     if (next < questions.length) {
@@ -84,7 +84,7 @@ function Training() {
       return;
     }
 
-    // 🔥 FINAL STEP — SAVE TO FIRESTORE
+    // 🔥 FINAL STEP — SAVE
     const user = auth.currentUser;
     if (!user) return;
 
@@ -108,13 +108,9 @@ function Training() {
         { merge: true }
       );
 
-      console.log("🔥 SAVED:", {
-        courseId,
-        score: newScore,
-        total: questions.length,
-      });
+      console.log("✅ Progress saved");
 
-      // ✅ TRIGGER COMPLETION SCREEN
+      // ✅ TRIGGER COMPLETION UI
       setCompleted(true);
 
     } catch (err) {
