@@ -4,17 +4,13 @@ const express = require("express");
 const cors = require("cors");
 const stripe = require("stripe")(process.env.STRIPE_SECRET_KEY);
 const admin = require("firebase-admin");
-console.log("🔥 DEPLOY VERSION 3");
-console.log("🔥 NEW DEPLOY ACTIVE - PRICE FIXED");
 const nodemailer = require("nodemailer");
 
 const app = express();
 
-/* ================= FIREBASE ================= */
+console.log("🔥 DEPLOY VERSION FINAL");
 
-if (!process.env.FIREBASE_KEY) {
-  throw new Error("❌ FIREBASE_KEY missing in env");
-}
+/* ================= FIREBASE ================= */
 
 const serviceAccount = JSON.parse(process.env.FIREBASE_KEY);
 
@@ -48,19 +44,7 @@ const sendEmail = async (email, message) => {
   }
 };
 
-/* ================= CORS ================= */
-
-app.use(cors({
-  origin: [
-    "http://localhost:3000",
-    "https://cyber-training-site.web.app",
-    "https://cyber-training-site.firebaseapp.com",
-    "https://cybersentinelhq.io"
-  ],
-  credentials: true
-}));
-
-/* ================= WEBHOOK ================= */
+/* ================= WEBHOOK (MUST BE FIRST) ================= */
 
 app.post("/webhook", express.raw({ type: "application/json" }), async (req, res) => {
   const sig = req.headers["stripe-signature"];
@@ -77,7 +61,7 @@ app.post("/webhook", express.raw({ type: "application/json" }), async (req, res)
     console.error("❌ Webhook signature failed:", err.message);
     return res.sendStatus(400);
   }
-  console.log("🔥 STRIPE KEY:", process.env.STRIPE_SECRET_KEY);
+
   console.log("🔔 Stripe event:", event.type);
 
   try {
@@ -154,7 +138,17 @@ app.post("/webhook", express.raw({ type: "application/json" }), async (req, res)
   res.sendStatus(200);
 });
 
-/* ================= JSON PARSER ================= */
+/* ================= MIDDLEWARE ================= */
+
+app.use(cors({
+  origin: [
+    "http://localhost:3000",
+    "https://cyber-training-site.web.app",
+    "https://cyber-training-site.firebaseapp.com",
+    "https://cybersentinelhq.io"
+  ],
+  credentials: true
+}));
 
 app.use(express.json());
 
@@ -164,48 +158,36 @@ app.post("/create-checkout-session", async (req, res) => {
   try {
     const { userId, email } = req.body;
 
-    console.log("📩 Request:", { userId, email });
-
     if (!userId || !email) {
       return res.status(400).json({ error: "Missing userId or email" });
     }
 
-    if (!process.env.FRONTEND_URL) {
-      throw new Error("FRONTEND_URL is not set");
-    }
-
     const session = await stripe.checkout.sessions.create({
       mode: "subscription",
-
       payment_method_types: ["card"],
 
       line_items: [
         {
-          price: "price_1TMELbJyuWLk753BCekkNJDN", // ✅ your price
+          price: "price_1TMELbJyuWLk753BCekkNJDN",
           quantity: 1,
         },
       ],
 
       customer_email: email,
 
+      metadata: {
+        userId: userId,
+      },
+
       success_url: `${process.env.FRONTEND_URL}/dashboard`,
       cancel_url: `${process.env.FRONTEND_URL}/payment`,
-
-      metadata: { userId },
     });
-
-    console.log("✅ Checkout created:", session.id);
 
     res.json({ url: session.url });
 
   } catch (error) {
-    console.error("🔥 Stripe Error:", error);
-
-    res.status(500).json({
-      error: error.message,
-      type: error.type,
-      code: error.code,
-    });
+    console.error("🔥 Stripe Error:", error.message);
+    res.status(500).json({ error: error.message });
   }
 });
 
@@ -240,7 +222,7 @@ app.post("/create-portal-session", async (req, res) => {
   }
 });
 
-/* ================= HEALTH CHECK ================= */
+/* ================= HEALTH ================= */
 
 app.get("/", (req, res) => {
   res.send("Backend working ✅");

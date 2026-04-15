@@ -26,20 +26,16 @@ function Dashboard() {
         return;
       }
 
-      setUser(currentUser); // ✅ FIXED
+      setUser(currentUser);
 
-      /* 🔥 USER DATA */
       const userRef = doc(db, "users", currentUser.uid);
 
       unsubUser = onSnapshot(userRef, (snap) => {
         if (snap.exists()) {
-          const data = snap.data();
-          console.log("🔥 USER DATA:", data);
-          setUserData(data);
+          setUserData(snap.data());
         }
       });
 
-      /* 🔥 PROGRESS */
       const progressRef = doc(db, "progress", currentUser.uid);
 
       unsubProgress = onSnapshot(
@@ -99,14 +95,8 @@ function Dashboard() {
     navigate("/login");
   };
 
-  /* 🔥 STRIPE CHECKOUT */
   const handleUpgrade = async () => {
-    console.log("🚀 Upgrade clicked");
-
-    if (!user) {
-      alert("User not loaded yet");
-      return;
-    }
+    if (!user) return alert("User not loaded");
 
     try {
       const res = await fetch(`${API_URL}/create-checkout-session`, {
@@ -120,29 +110,19 @@ function Dashboard() {
         }),
       });
 
-      console.log("🔥 STATUS:", res.status);
-
       const data = await res.json();
 
-      console.log("🔥 RESPONSE:", data);
-
-      if (!res.ok) {
-        throw new Error(data?.error || "Checkout failed");
-      }
-
-      if (!data.url) {
-        throw new Error("No checkout URL");
-      }
+      if (!res.ok) throw new Error(data?.error || "Checkout failed");
+      if (!data.url) throw new Error("No checkout URL");
 
       window.location.href = data.url;
 
     } catch (err) {
-      console.error("❌ Checkout error:", err);
-      alert(`Payment failed:\n\n${err.message}`);
+      console.error(err);
+      alert(err.message);
     }
   };
 
-  /* 🔥 BILLING PORTAL */
   const handleManageSubscription = async () => {
     try {
       const res = await fetch(`${API_URL}/create-portal-session`, {
@@ -157,14 +137,12 @@ function Dashboard() {
 
       const data = await res.json();
 
-      if (!data.url) {
-        throw new Error("No portal URL");
-      }
+      if (!data.url) throw new Error("No portal URL");
 
       window.location.href = data.url;
 
     } catch (err) {
-      console.error("❌ Portal error:", err);
+      console.error(err);
       alert("Failed to open billing portal");
     }
   };
@@ -187,7 +165,38 @@ function Dashboard() {
     );
   }
 
-  /* ================= UI ================= */
+  /* ================= 🔒 LOCK (MAIN CHANGE) ================= */
+
+  if (!isSubscribed) {
+    return (
+      <div style={styles.page}>
+        <div style={styles.header}>
+          <h1>Dashboard</h1>
+          <button onClick={handleLogout} style={styles.logout}>
+            Logout
+          </button>
+        </div>
+
+        <p style={styles.email}>{user.email}</p>
+
+        <div style={styles.card}>
+          <h2>Risk Score</h2>
+          <h1>{avg}%</h1>
+        </div>
+
+        <div style={styles.warning}>
+          <h3>🔒 Subscription Required</h3>
+          <p>You need to upgrade to access training.</p>
+
+          <button onClick={handleUpgrade} style={styles.upgradeBtn}>
+            Upgrade Now
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  /* ================= ✅ FULL ACCESS ================= */
 
   return (
     <div style={styles.page}>
@@ -205,24 +214,13 @@ function Dashboard() {
         <h1>{avg}%</h1>
       </div>
 
-      {!isSubscribed ? (
-        <div style={styles.warning}>
-          <h3>🔒 Subscription Required</h3>
-          <p>You need to upgrade to access training.</p>
+      <div style={styles.card}>
+        <h3>✅ Subscription Active</h3>
 
-          <button onClick={handleUpgrade} style={styles.upgradeBtn}>
-            Upgrade Now
-          </button>
-        </div>
-      ) : (
-        <div style={styles.card}>
-          <h3>✅ Subscription Active</h3>
-
-          <button onClick={handleManageSubscription} style={styles.button}>
-            Manage Subscription
-          </button>
-        </div>
-      )}
+        <button onClick={handleManageSubscription} style={styles.button}>
+          Manage Subscription
+        </button>
+      </div>
 
       <div style={styles.card}>
         <h2>Start Your Training</h2>
@@ -231,11 +229,7 @@ function Dashboard() {
           {["phishing", "passwords", "social"].map((course) => (
             <button
               key={course}
-              onClick={() =>
-                isSubscribed
-                  ? navigate(`/training/${course}`)
-                  : handleUpgrade()
-              }
+              onClick={() => navigate(`/training/${course}`)}
               style={styles.button}
             >
               {course === "phishing"
