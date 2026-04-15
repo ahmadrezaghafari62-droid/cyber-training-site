@@ -6,7 +6,7 @@ import { onAuthStateChanged } from "firebase/auth";
 import { doc, setDoc, getDoc } from "firebase/firestore";
 
 /* PAGES */
-import Landing from "./Home"; // or rename if needed
+import Landing from "./Home";
 import Login from "./Login";
 import Signup from "./Signup";
 import Dashboard from "./Dashboard";
@@ -21,7 +21,7 @@ import ProtectedRoute from "./ProtectedRoute";
 import PaymentRoute from "./PaymentRoute";
 
 function App() {
-  const [user, setUser] = useState(null);
+  const [user, setUser] = useState(undefined); // 🔥 IMPORTANT
   const [loading, setLoading] = useState(true);
 
   /* ================= FIREBASE AUTH ================= */
@@ -64,16 +64,18 @@ function App() {
 
   /* ================= LOADING ================= */
 
-  if (loading) {
+  if (loading || user === undefined) {
     return (
-      <div style={{
-        background: "#020617",
-        color: "white",
-        height: "100vh",
-        display: "flex",
-        justifyContent: "center",
-        alignItems: "center"
-      }}>
+      <div
+        style={{
+          background: "#020617",
+          color: "white",
+          height: "100vh",
+          display: "flex",
+          justifyContent: "center",
+          alignItems: "center",
+        }}
+      >
         Loading...
       </div>
     );
@@ -87,7 +89,7 @@ function App() {
       {/* HOME */}
       <Route
         path="/"
-        element={user ? <Navigate to="/dashboard" /> : <Landing />}
+        element={user ? <Navigate to="/dashboard" replace /> : <Landing />}
       />
 
       {/* PUBLIC */}
@@ -97,6 +99,9 @@ function App() {
 
       {/* PAYMENT */}
       <Route path="/payment" element={<Payment />} />
+
+      {/* COMPLETED (🔥 MUST BE ABOVE PROTECTED LOGIC) */}
+      <Route path="/completed" element={<Completed />} />
 
       {/* DASHBOARD */}
       <Route
@@ -120,10 +125,9 @@ function App() {
 
       {/* ADMIN */}
       <Route path="/admin" element={<Admin />} />
-      <Route path="/completed" element={<Completed />} />
 
       {/* FALLBACK */}
-      <Route path="*" element={<Navigate to="/" />} />
+      <Route path="*" element={<Navigate to="/" replace />} />
 
     </Routes>
   );

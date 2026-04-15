@@ -76,7 +76,12 @@ function Dashboard() {
 let totalPossible = 0;
 
 Object.values(progress || {}).forEach((course) => {
-  if (course?.total > 0) {
+  if (
+    course &&
+    typeof course.score === "number" &&
+    typeof course.total === "number" &&
+    course.total > 0
+  ) {
     totalScore += course.score;
     totalPossible += course.total;
   }
