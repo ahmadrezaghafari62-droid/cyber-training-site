@@ -232,15 +232,18 @@ function Dashboard() {
         </p>
 
         {/* ✅ COMPLETION MESSAGE */}
-        {avg >= 100 && (
-  <div style={{ marginTop: "15px" }}>
-    <p style={{ color: "#22c55e", fontWeight: "bold" }}>
-      🎉 Training Complete!
-    </p>
-    <p style={{ color: "#94a3b8" }}>
-      You’ve mastered all modules. Great job.
-    </p>
-  </div>
+  {Object.keys(progress).length > 0 &&
+  Object.values(progress).every(
+    (course) => course?.score === course?.total
+  ) && (
+    <div style={{ marginTop: "15px" }}>
+      <p style={{ color: "#22c55e", fontWeight: "bold" }}>
+        🎉 Training Complete!
+      </p>
+      <p style={{ color: "#94a3b8" }}>
+        You’ve mastered all modules. Great job.
+      </p>
+    </div>
 )}
       </div>
 

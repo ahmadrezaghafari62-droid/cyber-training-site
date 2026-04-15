@@ -30,7 +30,6 @@ function Training() {
   useEffect(() => {
     if (!completed) return;
 
-    console.log("🎉 COMPLETION SCREEN SHOWN");
 
     const timer = setTimeout(() => {
       navigate("/dashboard");
@@ -95,53 +94,65 @@ function Training() {
     }
 
     // 🔥 FINAL STEP — SAVE
-    const user = auth.currentUser;
-    if (!user) return;
+const user = auth.currentUser;
+if (!user) return;
 
-    setSaving(true);
+setSaving(true);
 
-    try {
-      await setDoc(
-        doc(db, "progress", user.uid),
-        {
-          [courseId]: {
-            score: newScore,
-            total: questions.length,
-          },
-          history: arrayUnion({
-            courseId,
-            date: new Date().toISOString(),
-            score: newScore,
-            total: questions.length,
-          }),
-        },
-        { merge: true }
-      );
+try {
+  await setDoc(
+    doc(db, "progress", user.uid),
+    {
+      [courseId]: {
+        score: newScore,
+        total: questions.length,
+      },
+      history: arrayUnion({
+        courseId,
+        date: new Date().toISOString(),
+        score: newScore,
+        total: questions.length,
+      }),
+    },
+    { merge: true }
+  );
 
-      console.log("✅ Progress saved");
+  console.log("✅ Progress saved");
 
-      // ✅ CLEAN STATE UPDATE (NO HACKS)
-      setCompleted(true);
+  // 🔥 THIS IS THE ONLY STATE CHANGE
+  setCompleted(true);
 
-    } catch (err) {
-      console.error("🔥 Save error:", err.message);
-      setSaving(false);
-    }
+} catch (err) {
+  console.error("🔥 Save error:", err.message);
+  setSaving(false);
+}
   };
 
   /* ================= COMPLETION SCREEN ================= */
 
-  if (completed) {
-    return (
-      <div style={styles.center}>
-        <h1>🎉 Course Completed!</h1>
-        <p>
-          Your score: {score} / {questions.length}
-        </p>
-        <p>{saving ? "Saving progress..." : "Redirecting..."}</p>
-      </div>
-    );
-  }
+ if (completed) {
+  return (
+    <div style={{
+      background: "#020617",
+      minHeight: "100vh",
+      color: "white",
+      display: "flex",
+      flexDirection: "column",
+      justifyContent: "center",
+      alignItems: "center",
+      fontSize: "20px"
+    }}>
+      <h1 style={{ color: "#22c55e" }}>🎉 Course Completed!</h1>
+      <p>Your score: {score} / {questions.length}</p>
+
+      {saving && <p>Saving progress...</p>}
+
+      <p style={{ marginTop: "20px", color: "#94a3b8" }}>
+        Redirecting to dashboard...
+      </p>
+    </div>
+  );
+}
 
   /* ================= NO COURSE ================= */
 

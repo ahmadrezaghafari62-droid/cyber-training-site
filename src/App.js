@@ -61,73 +61,54 @@ function App() {
     }
   };
 
-  /* ================================
-     🔐 AUTH LISTENER
-  ================================= */
+  /* ================================= */
 
-  useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (user) => {
-      if (user) {
-        createUserIfNotExists(user);
-      }
-    });
 
-    return () => unsubscribe();
-  }, []);
-
-  /* ================================
-     🚀 ROUTES
-  ================================= */
 
   return (
-    <Routes>
+  <Routes>
 
-  {/* ================= HOME / LANDING ================= */}
-  <Route
-    path="/"
-    element={
-      user && !sessionStorage.getItem("inTraining")
-        ? <Navigate to="/dashboard" />
-        : <Landing />
-    }
-  />
+    {/* ================= HOME ================= */}
+    <Route
+      path="/"
+      element={user ? <Navigate to="/dashboard" /> : <Landing />}
+    />
 
-  {/* ================= PUBLIC ================= */}
-  <Route path="/login" element={<Login />} />
-  <Route path="/signup" element={<Signup />} />
-  <Route path="/contact" element={<Contact />} />
+    {/* ================= PUBLIC ================= */}
+    <Route path="/login" element={<Login />} />
+    <Route path="/signup" element={<Signup />} />
+    <Route path="/contact" element={<Contact />} />
 
-  {/* ================= PAYMENT ================= */}
-  <Route path="/payment" element={<Payment />} />
+    {/* ================= PAYMENT ================= */}
+    <Route path="/payment" element={<Payment />} />
 
-  {/* ================= DASHBOARD (PROTECTED) ================= */}
-  <Route
-    path="/dashboard"
-    element={
-      <ProtectedRoute>
-        <Dashboard />
-      </ProtectedRoute>
-    }
-  />
+    {/* ================= DASHBOARD ================= */}
+    <Route
+      path="/dashboard"
+      element={
+        <ProtectedRoute>
+          <Dashboard />
+        </ProtectedRoute>
+      }
+    />
 
-  {/* ================= TRAINING (SUBSCRIPTION REQUIRED) ================= */}
-  <Route
-    path="/training/:courseId"
-    element={
-      <PaymentRoute>
-        <Training />
-      </PaymentRoute>
-    }
-  />
+    {/* ================= TRAINING ================= */}
+    <Route
+      path="/training/:courseId"
+      element={
+        <PaymentRoute>
+          <Training />
+        </PaymentRoute>
+      }
+    />
 
-  {/* ================= ADMIN ================= */}
-  <Route path="/admin" element={<Admin />} />
+    {/* ================= ADMIN ================= */}
+    <Route path="/admin" element={<Admin />} />
 
-  {/* ================= FALLBACK ================= */}
-  <Route path="*" element={<Navigate to="/" />} />
+    {/* ================= FALLBACK ================= */}
+    <Route path="*" element={<Navigate to="/" />} />
 
-</Routes>
-  );
-}
+  </Routes>
+);
 
 export default App;
