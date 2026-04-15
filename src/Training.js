@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { auth, db } from "./firebase";
 import { doc, setDoc, arrayUnion } from "firebase/firestore";
 import { useParams, useNavigate } from "react-router-dom";
@@ -9,34 +9,8 @@ function Training() {
 
   const [step, setStep] = useState(0);
   const [score, setScore] = useState(0);
-  const [completed, setCompleted] = useState(false);
-  const [saving, setSaving] = useState(false);
   const [selectedAnswer, setSelectedAnswer] = useState(null);
-
-  console.log("🔁 Training render:", { completed });
-
-  /* ================= BLOCK REDIRECT WHILE TRAINING ================= */
-
-  useEffect(() => {
-    sessionStorage.setItem("inTraining", "true");
-
-    return () => {
-      sessionStorage.removeItem("inTraining");
-    };
-  }, []);
-
-  /* ================= REDIRECT AFTER COMPLETION ================= */
-
-  useEffect(() => {
-    if (!completed) return;
-
-
-    const timer = setTimeout(() => {
-      navigate("/dashboard");
-    }, 3000); // allow user to SEE completion
-
-    return () => clearTimeout(timer);
-  }, [completed, navigate]);
+  const [saving, setSaving] = useState(false);
 
   /* ================= COURSE DATA ================= */
 
@@ -87,72 +61,54 @@ function Training() {
 
     const next = step + 1;
 
+    // 👉 Move to next question
     if (next < questions.length) {
-      setStep(next);
-      setSelectedAnswer(null);
+      setTimeout(() => {
+        setStep(next);
+        setSelectedAnswer(null);
+      }, 400);
       return;
     }
 
     // 🔥 FINAL STEP — SAVE
-const user = auth.currentUser;
-if (!user) return;
+    const user = auth.currentUser;
+    if (!user) return;
 
-setSaving(true);
+    setSaving(true);
 
-try {
-  await setDoc(
-    doc(db, "progress", user.uid),
-    {
-      [courseId]: {
-        score: newScore,
-        total: questions.length,
-      },
-      history: arrayUnion({
-        courseId,
-        date: new Date().toISOString(),
-        score: newScore,
-        total: questions.length,
-      }),
-    },
-    { merge: true }
-  );
+    try {
+      await setDoc(
+        doc(db, "progress", user.uid),
+        {
+          [courseId]: {
+            score: newScore,
+            total: questions.length,
+          },
+          history: arrayUnion({
+            courseId,
+            date: new Date().toISOString(),
+            score: newScore,
+            total: questions.length,
+          }),
+        },
+        { merge: true }
+      );
 
-  console.log("✅ Progress saved");
+      console.log("✅ Progress saved");
 
-  // 🔥 THIS IS THE ONLY STATE CHANGE
-  navigate("/completed");
+      // ✅ GO TO COMPLETION PAGE (WITH DATA)
+      navigate("/completed", {
+        state: {
+          score: newScore,
+          total: questions.length,
+        },
+      });
 
-} catch (err) {
-  console.error("🔥 Save error:", err.message);
-  setSaving(false);
-}
+    } catch (err) {
+      console.error("🔥 Save error:", err.message);
+      setSaving(false);
+    }
   };
-
-  /* ================= COMPLETION SCREEN ================= */
-
- if (completed) {
-  return (
-    <div style={{
-      background: "#020617",
-      minHeight: "100vh",
-      color: "white",
-      display: "flex",
-      flexDirection: "column",
-      justifyContent: "center",
-      alignItems: "center",
-      fontSize: "20px"
-    }}>
-      <h1 style={{ color: "#22c55e" }}>🎉 Course Completed!</h1>
-      <p>Your score: {score} / {questions.length}</p>
-
-      {saving && <p>Saving progress...</p>}
-
-      <p style={{ marginTop: "20px", color: "#94a3b8" }}>
-        Redirecting to dashboard...
-      </p>
-    </div>
-  );
-}
 
   /* ================= NO COURSE ================= */
 
@@ -197,6 +153,8 @@ try {
       <p style={{ marginTop: "20px" }}>
         Question {step + 1} of {questions.length}
       </p>
+
+      {saving && <p style={{ marginTop: "10px" }}>Saving progress...</p>}
     </div>
   );
 }
@@ -214,7 +172,6 @@ const styles = {
     background: "#020617",
     minHeight: "100vh",
     display: "flex",
-    flexDirection: "column",
     justifyContent: "center",
     alignItems: "center",
     color: "white",
