@@ -97,6 +97,7 @@ function Training() {
       console.log("✅ Progress saved");
 
       // ✅ GO TO COMPLETION PAGE (WITH DATA)
+      console.log("🚀 NAVIGATING TO COMPLETED");
       navigate("/completed", {
         state: {
           score: newScore,

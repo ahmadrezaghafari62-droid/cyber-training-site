@@ -86,50 +86,47 @@ function App() {
   return (
     <Routes>
 
-      {/* HOME */}
-      <Route
-        path="/"
-        element={user ? <Navigate to="/dashboard" replace /> : <Landing />}
-      />
+  {/* ✅ COMPLETED FIRST (VERY IMPORTANT) */}
+  <Route path="/completed" element={<Completed />} />
 
-      {/* PUBLIC */}
-      <Route path="/login" element={<Login />} />
-      <Route path="/signup" element={<Signup />} />
-      <Route path="/contact" element={<Contact />} />
+  {/* HOME */}
+ <Route path="/" element={<Landing />} />
 
-      {/* PAYMENT */}
-      <Route path="/payment" element={<Payment />} />
+  {/* PUBLIC */}
+  <Route path="/login" element={<Login />} />
+  <Route path="/signup" element={<Signup />} />
+  <Route path="/contact" element={<Contact />} />
 
-      {/* COMPLETED (🔥 MUST BE ABOVE PROTECTED LOGIC) */}
-      <Route path="/completed" element={<Completed />} />
+  {/* PAYMENT */}
+  <Route path="/payment" element={<Payment />} />
 
-      {/* DASHBOARD */}
-      <Route
-        path="/dashboard"
-        element={
-          <ProtectedRoute>
-            <Dashboard />
-          </ProtectedRoute>
-        }
-      />
+  {/* DASHBOARD */}
+  <Route
+    path="/dashboard"
+    element={
+      <ProtectedRoute>
+        <Dashboard />
+      </ProtectedRoute>
+    }
+  />
 
-      {/* TRAINING */}
-      <Route
-        path="/training/:courseId"
-        element={
-          <PaymentRoute>
-            <Training />
-          </PaymentRoute>
-        }
-      />
+  {/* TRAINING */}
+  <Route
+    path="/training/:courseId"
+    element={
+      <PaymentRoute>
+        <Training />
+      </PaymentRoute>
+    }
+  />
 
-      {/* ADMIN */}
-      <Route path="/admin" element={<Admin />} />
+  {/* ADMIN */}
+  <Route path="/admin" element={<Admin />} />
 
-      {/* FALLBACK */}
-      <Route path="*" element={<Navigate to="/" replace />} />
+  {/* FALLBACK */}
+  <Route path="*" element={<Navigate to="/" />} />
 
-    </Routes>
+</Routes>
   );
 }
 
