@@ -120,7 +120,7 @@ try {
   console.log("✅ Progress saved");
 
   // 🔥 THIS IS THE ONLY STATE CHANGE
-  setCompleted(true);
+  navigate("/completed");
 
 } catch (err) {
   console.error("🔥 Save error:", err.message);

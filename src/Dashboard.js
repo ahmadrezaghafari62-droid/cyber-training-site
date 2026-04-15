@@ -73,18 +73,19 @@ function Dashboard() {
   /* ================= RISK SCORE ================= */
 
   let totalScore = 0;
-  let totalPossible = 0;
+let totalPossible = 0;
 
-  Object.values(progress || {}).forEach((course) => {
-  if (course?.score === undefined || course?.total === undefined) return;
+Object.values(progress || {}).forEach((course) => {
+  if (course?.total > 0) {
     totalScore += course.score;
     totalPossible += course.total;
-  });
+  }
+});
 
-  const avg =
-    totalPossible > 0
-      ? Math.round((totalScore / totalPossible) * 100)
-      : 0;
+const avg =
+  totalPossible > 0
+    ? Math.round((totalScore / totalPossible) * 100)
+    : 0;
 
   let riskLevel = "Low";
   if (avg < 40) riskLevel = "High";

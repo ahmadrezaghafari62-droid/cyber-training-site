@@ -14,6 +14,7 @@ import Admin from "./Admin";
 import Payment from "./Payment";
 import Training from "./Training";
 import Contact from "./Contact";
+import Completed from "./Completed";
 
 /* ROUTE GUARDS */
 import ProtectedRoute from "./ProtectedRoute";
@@ -119,6 +120,7 @@ function App() {
 
       {/* ADMIN */}
       <Route path="/admin" element={<Admin />} />
+      <Route path="/completed" element={<Completed />} />
 
       {/* FALLBACK */}
       <Route path="*" element={<Navigate to="/" />} />
