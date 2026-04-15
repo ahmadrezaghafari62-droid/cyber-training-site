@@ -1,3 +1,4 @@
+console.log("🔥 TRAINING VERSION FIXED V2");
 import { useState, useEffect } from "react";
 import { auth, db } from "./firebase";
 import { doc, setDoc, arrayUnion } from "firebase/firestore";
