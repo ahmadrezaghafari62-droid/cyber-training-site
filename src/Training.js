@@ -15,18 +15,28 @@ function Training() {
 
   console.log("🔁 Training render:", { completed });
 
-  /* ================= AUTO REDIRECT ================= */
+  /* ================= BLOCK REDIRECT WHILE TRAINING ================= */
 
   useEffect(() => {
-    if (completed) {
-      console.log("🎉 COMPLETION SCREEN SHOWN");
+    sessionStorage.setItem("inTraining", "true");
 
-      const timer = setTimeout(() => {
-        navigate("/dashboard");
-      }, 3000); // give enough time to SEE it
+    return () => {
+      sessionStorage.removeItem("inTraining");
+    };
+  }, []);
 
-      return () => clearTimeout(timer);
-    }
+  /* ================= REDIRECT AFTER COMPLETION ================= */
+
+  useEffect(() => {
+    if (!completed) return;
+
+    console.log("🎉 COMPLETION SCREEN SHOWN");
+
+    const timer = setTimeout(() => {
+      navigate("/dashboard");
+    }, 3000); // allow user to SEE completion
+
+    return () => clearTimeout(timer);
   }, [completed, navigate]);
 
   /* ================= COURSE DATA ================= */
@@ -110,7 +120,7 @@ function Training() {
 
       console.log("✅ Progress saved");
 
-      // 🔥 THIS TRIGGERS UI FIRST
+      // ✅ CLEAN STATE UPDATE (NO HACKS)
       setCompleted(true);
 
     } catch (err) {

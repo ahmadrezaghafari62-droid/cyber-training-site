@@ -87,7 +87,14 @@ function App() {
       <Route path="/login" element={<Login />} />
       <Route path="/signup" element={<Signup />} />
       <Route path="/contact" element={<Contact />} />
-      <Route path="/" element={user ? <Navigate to="/dashboard" /> : <Landing />} />
+      <Route
+  path="/"
+  element={
+    user && !sessionStorage.getItem("inTraining")
+      ? <Navigate to="/dashboard" />
+      : <Landing />
+  }
+/>
 
       {/* PAYMENT */}
       <Route path="/payment" element={<Payment />} />
