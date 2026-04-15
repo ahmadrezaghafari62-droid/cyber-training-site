@@ -82,50 +82,51 @@ function App() {
   return (
     <Routes>
 
-      {/* PUBLIC ROUTES */}
-      <Route path="/" element={<Home />} />
-      <Route path="/login" element={<Login />} />
-      <Route path="/signup" element={<Signup />} />
-      <Route path="/contact" element={<Contact />} />
-      <Route
-  path="/"
-  element={
-    user && !sessionStorage.getItem("inTraining")
-      ? <Navigate to="/dashboard" />
-      : <Landing />
-  }
-/>
+  {/* ================= HOME / LANDING ================= */}
+  <Route
+    path="/"
+    element={
+      user && !sessionStorage.getItem("inTraining")
+        ? <Navigate to="/dashboard" />
+        : <Landing />
+    }
+  />
 
-      {/* PAYMENT */}
-      <Route path="/payment" element={<Payment />} />
+  {/* ================= PUBLIC ================= */}
+  <Route path="/login" element={<Login />} />
+  <Route path="/signup" element={<Signup />} />
+  <Route path="/contact" element={<Contact />} />
 
-      {/* PROTECTED DASHBOARD */}
-      <Route
-        path="/dashboard"
-        element={
-          <ProtectedRoute>
-            <Dashboard />
-          </ProtectedRoute>
-        }
-      />
+  {/* ================= PAYMENT ================= */}
+  <Route path="/payment" element={<Payment />} />
 
-      {/* TRAINING (REQUIRES PAYMENT OR TRIAL) */}
-      <Route
-        path="/training/:courseId"
-        element={
-          <PaymentRoute>
-            <Training />
-          </PaymentRoute>
-        }
-      />
+  {/* ================= DASHBOARD (PROTECTED) ================= */}
+  <Route
+    path="/dashboard"
+    element={
+      <ProtectedRoute>
+        <Dashboard />
+      </ProtectedRoute>
+    }
+  />
 
-      {/* ADMIN */}
-      <Route path="/admin" element={<Admin />} />
+  {/* ================= TRAINING (SUBSCRIPTION REQUIRED) ================= */}
+  <Route
+    path="/training/:courseId"
+    element={
+      <PaymentRoute>
+        <Training />
+      </PaymentRoute>
+    }
+  />
 
-      {/* FALLBACK (OPTIONAL BUT GOOD PRACTICE) */}
-      <Route path="*" element={<Home />} />
+  {/* ================= ADMIN ================= */}
+  <Route path="/admin" element={<Admin />} />
 
-    </Routes>
+  {/* ================= FALLBACK ================= */}
+  <Route path="*" element={<Navigate to="/" />} />
+
+</Routes>
   );
 }
 
