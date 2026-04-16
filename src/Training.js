@@ -59,14 +59,14 @@ function Training() {
       setScore(newScore);
     }
 
-    const next = step + 1;
+    const nextStep = step + 1;
 
     // 👉 Move to next question
-    if (next < questions.length) {
+    if (nextStep < questions.length) {
       setTimeout(() => {
-        setStep(next);
+        setStep(nextStep);
         setSelectedAnswer(null);
-      }, 400);
+      }, 500);
       return;
     }
 
@@ -96,15 +96,14 @@ function Training() {
 
       console.log("✅ Progress saved");
 
-      // ✅ GO TO COMPLETION PAGE (WITH DATA)
-      console.log("🚀 NAVIGATING TO COMPLETED");
-     navigate("/certificate", {
-  state: {
-    score: newScore,
-    total: questions.length,
-    courseId
-  }
-});
+      // 🎓 Navigate to certificate
+      navigate("/certificate", {
+        state: {
+          score: newScore,
+          total: questions.length,
+          courseId,
+        },
+      });
 
     } catch (err) {
       console.error("🔥 Save error:", err.message);
@@ -126,7 +125,9 @@ function Training() {
 
   return (
     <div style={styles.page}>
-      <h2>{questions[step].question}</h2>
+      <h2 style={{ marginBottom: "20px" }}>
+        {questions[step].question}
+      </h2>
 
       {questions[step].options.map((opt, i) => {
         const isCorrect = opt === questions[step].answer;
@@ -152,11 +153,15 @@ function Training() {
         );
       })}
 
-      <p style={{ marginTop: "20px" }}>
+      <p style={{ marginTop: "20px", color: "#94a3b8" }}>
         Question {step + 1} of {questions.length}
       </p>
 
-      {saving && <p style={{ marginTop: "10px" }}>Saving progress...</p>}
+      {saving && (
+        <p style={{ marginTop: "10px", color: "#94a3b8" }}>
+          Saving progress...
+        </p>
+      )}
     </div>
   );
 }

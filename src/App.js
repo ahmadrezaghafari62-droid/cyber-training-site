@@ -15,17 +15,16 @@ import Payment from "./Payment";
 import Training from "./Training";
 import Contact from "./Contact";
 import Certificate from "./Certificate";
-import Completed from "./Completed";
 
 /* ROUTE GUARDS */
 import ProtectedRoute from "./ProtectedRoute";
 import PaymentRoute from "./PaymentRoute";
 
 function App() {
-  const [user, setUser] = useState(undefined); // 🔥 IMPORTANT
+  const [user, setUser] = useState(undefined);
   const [loading, setLoading] = useState(true);
 
-  /* ================= FIREBASE AUTH ================= */
+  /* ================= AUTH ================= */
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
@@ -67,16 +66,14 @@ function App() {
 
   if (loading || user === undefined) {
     return (
-      <div
-        style={{
-          background: "#020617",
-          color: "white",
-          height: "100vh",
-          display: "flex",
-          justifyContent: "center",
-          alignItems: "center",
-        }}
-      >
+      <div style={{
+        background: "#020617",
+        color: "white",
+        height: "100vh",
+        display: "flex",
+        justifyContent: "center",
+        alignItems: "center"
+      }}>
         Loading...
       </div>
     );
@@ -87,48 +84,50 @@ function App() {
   return (
     <Routes>
 
-  {/* ✅ COMPLETED FIRST (VERY IMPORTANT) */}
-  <Route path="/completed" element={<Completed />} />
+      {/* HOME (SMART REDIRECT) */}
+      <Route
+        path="/"
+        element={user ? <Navigate to="/dashboard" /> : <Landing />}
+      />
 
-  {/* HOME */}
- <Route path="/" element={<Landing />} />
+      {/* PUBLIC */}
+      <Route path="/login" element={<Login />} />
+      <Route path="/signup" element={<Signup />} />
+      <Route path="/contact" element={<Contact />} />
 
-  {/* PUBLIC */}
-  <Route path="/login" element={<Login />} />
-  <Route path="/signup" element={<Signup />} />
-  <Route path="/contact" element={<Contact />} />
+      {/* PAYMENT */}
+      <Route path="/payment" element={<Payment />} />
 
-  {/* PAYMENT */}
-  <Route path="/payment" element={<Payment />} />
+      {/* DASHBOARD */}
+      <Route
+        path="/dashboard"
+        element={
+          <ProtectedRoute>
+            <Dashboard />
+          </ProtectedRoute>
+        }
+      />
 
-  {/* DASHBOARD */}
-  <Route
-    path="/dashboard"
-    element={
-      <ProtectedRoute>
-        <Dashboard />
-      </ProtectedRoute>
-    }
-  />
+      {/* TRAINING */}
+      <Route
+        path="/training/:courseId"
+        element={
+          <PaymentRoute>
+            <Training />
+          </PaymentRoute>
+        }
+      />
 
-  {/* TRAINING */}
-  <Route
-    path="/training/:courseId"
-    element={
-      <PaymentRoute>
-        <Training />
-      </PaymentRoute>
-    }
-  />
+      {/* CERTIFICATE ✅ */}
+      <Route path="/certificate" element={<Certificate />} />
 
-  {/* ADMIN */}
-  <Route path="/admin" element={<Admin />} />
-  <Route path="/certificate" element={<Certificate />} />
+      {/* ADMIN */}
+      <Route path="/admin" element={<Admin />} />
 
-  {/* FALLBACK */}
-  <Route path="*" element={<Navigate to="/" />} />
+      {/* FALLBACK */}
+      <Route path="*" element={<Navigate to="/" />} />
 
-</Routes>
+    </Routes>
   );
 }
 
