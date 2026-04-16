@@ -15,17 +15,48 @@ function Dashboard() {
   /* ================= HELPERS ================= */
 
   const getPercentage = (score, total) => {
-    if (!total || total === 0) return 0;
+    if (!total) return 0;
     return Math.round((score / total) * 100);
   };
 
-  const getCoursesOnly = () => {
-    return Object.entries(progress).filter(
-      ([_, value]) =>
-        value &&
-        typeof value.score === "number" &&
-        typeof value.total === "number"
+  const getCoursesOnly = () =>
+    Object.entries(progress).filter(
+      ([_, v]) =>
+        v &&
+        typeof v.score === "number" &&
+        typeof v.total === "number"
     );
+
+  /* ================= CREATE COMPANY ================= */
+
+  const handleCreateCompany = async () => {
+    console.log("🔥 CLICKED");
+
+    if (!user) return;
+
+    try {
+      const companyRef = doc(db, "companies", user.uid);
+
+      await setDoc(companyRef, {
+        companyName: "My Company",
+        ownerId: user.uid,
+        createdAt: new Date(),
+      });
+
+      await setDoc(
+        doc(db, "users", user.uid),
+        {
+          companyId: user.uid,
+          role: "admin",
+        },
+        { merge: true }
+      );
+
+      alert("✅ Company created!");
+    } catch (err) {
+      console.error("🔥 ERROR:", err);
+      alert("Error creating company");
+    }
   };
 
   /* ================= LOAD USER ================= */
@@ -43,11 +74,19 @@ function Dashboard() {
       setUser(currentUser);
 
       const userRef = doc(db, "users", currentUser.uid);
+
       unsubUser = onSnapshot(userRef, (snap) => {
-        if (snap.exists()) setUserData(snap.data());
+        if (snap.exists()) {
+          const data = snap.data();
+          console.log("USER DATA:", data);
+          setUserData(data);
+        } else {
+          setUserData({});
+        }
       });
 
       const progressRef = doc(db, "progress", currentUser.uid);
+
       unsubProgress = onSnapshot(progressRef, async (snap) => {
         if (snap.exists()) {
           setProgress(snap.data());
@@ -77,13 +116,8 @@ function Dashboard() {
 
   const courses = getCoursesOnly();
 
-  let totalScore = 0;
-  let totalPossible = 0;
-
-  courses.forEach(([_, course]) => {
-    totalScore += course.score;
-    totalPossible += course.total;
-  });
+  const totalScore = courses.reduce((sum, [_, c]) => sum + c.score, 0);
+  const totalPossible = courses.reduce((sum, [_, c]) => sum + c.total, 0);
 
   const avg =
     totalPossible > 0
@@ -113,17 +147,10 @@ function Dashboard() {
     navigate("/login");
   };
 
-  /* ================= LOADING ================= */
+  /* ================= STATES ================= */
 
-  if (loading) {
-    return <div style={styles.center}>Loading...</div>;
-  }
-
-  if (!user) {
-    return <div style={styles.center}>Authenticating...</div>;
-  }
-
-  /* ================= LOCK ================= */
+  if (loading) return <div style={styles.center}>Loading...</div>;
+  if (!user) return <div style={styles.center}>Authenticating...</div>;
 
   if (!isSubscribed) {
     return (
@@ -154,31 +181,27 @@ function Dashboard() {
 
       <p style={styles.email}>{user.email}</p>
 
+      {/* ✅ COMPANY ALWAYS VISIBLE */}
+      <div style={styles.card}>
+        <h2>🏢 Company</h2>
+
+        <p style={{ color: "#94a3b8" }}>
+          Company ID: {userData?.companyId || "None"}
+        </p>
+
+        {!userData?.companyId && (
+          <button onClick={handleCreateCompany} style={styles.button}>
+            Create Company
+          </button>
+        )}
+      </div>
+
       {/* RISK */}
       <div style={styles.card}>
         <h2>Risk Score</h2>
         <h1>{avg}%</h1>
 
-        <p
-          style={{
-            color:
-              riskLevel === "High"
-                ? "#ef4444"
-                : riskLevel === "Medium"
-                ? "#f59e0b"
-                : "#22c55e",
-          }}
-        >
-          {riskLevel} Risk
-        </p>
-
-        {/* COMPLETION */}
-        {courses.length > 0 &&
-          courses.every(([_, c]) => c.score === c.total) && (
-            <p style={{ color: "#22c55e", marginTop: "10px" }}>
-              🎉 Training Complete!
-            </p>
-          )}
+        <p style={{ color: "#22c55e" }}>{riskLevel} Risk</p>
       </div>
 
       {/* PROGRESS */}
@@ -186,6 +209,7 @@ function Dashboard() {
         <h2>📊 Training Progress</h2>
 
         <p>Overall: {overallProgress}%</p>
+
         <div style={styles.progressBar}>
           <div
             style={{ ...styles.progressFill, width: `${overallProgress}%` }}
@@ -198,9 +222,13 @@ function Dashboard() {
           return (
             <div key={key} style={{ marginTop: "20px" }}>
               <p>{key.toUpperCase()} — {percent}%</p>
+
               <div style={styles.progressBar}>
                 <div
-                  style={{ ...styles.progressFill, width: `${percent}%` }}
+                  style={{
+                    ...styles.progressFill,
+                    width: `${percent}%`,
+                  }}
                 />
               </div>
             </div>

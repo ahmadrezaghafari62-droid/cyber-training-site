@@ -21,20 +21,24 @@ import ProtectedRoute from "./ProtectedRoute";
 import PaymentRoute from "./PaymentRoute";
 
 function App() {
-  const [user, setUser] = useState(undefined);
+  const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
 
   /* ================= AUTH ================= */
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
-      setUser(currentUser);
+      try {
+        setUser(currentUser);
 
-      if (currentUser) {
-        await createUserIfNotExists(currentUser);
+        if (currentUser) {
+          await createUserIfNotExists(currentUser);
+        }
+      } catch (err) {
+        console.error("🔥 Auth error:", err);
+      } finally {
+        setLoading(false);
       }
-
-      setLoading(false);
     });
 
     return () => unsubscribe();
@@ -52,6 +56,8 @@ function App() {
           email: user.email,
           isSubscribed: false,
           trialActive: true,
+          companyId: null,   // 🔥 READY FOR COMPANY SYSTEM
+          role: "user",      // 🔥 FUTURE: admin/user roles
           createdAt: new Date(),
         });
 
@@ -64,16 +70,9 @@ function App() {
 
   /* ================= LOADING ================= */
 
-  if (loading || user === undefined) {
+  if (loading) {
     return (
-      <div style={{
-        background: "#020617",
-        color: "white",
-        height: "100vh",
-        display: "flex",
-        justifyContent: "center",
-        alignItems: "center"
-      }}>
+      <div style={styles.loading}>
         Loading...
       </div>
     );
@@ -118,11 +117,18 @@ function App() {
         }
       />
 
-      {/* CERTIFICATE ✅ */}
+      {/* CERTIFICATE */}
       <Route path="/certificate" element={<Certificate />} />
 
-      {/* ADMIN */}
-      <Route path="/admin" element={<Admin />} />
+      {/* ADMIN (FUTURE COMPANY DASHBOARD) */}
+      <Route
+        path="/admin"
+        element={
+          <ProtectedRoute>
+            <Admin />
+          </ProtectedRoute>
+        }
+      />
 
       {/* FALLBACK */}
       <Route path="*" element={<Navigate to="/" />} />
@@ -130,5 +136,18 @@ function App() {
     </Routes>
   );
 }
+
+/* ================= STYLES ================= */
+
+const styles = {
+  loading: {
+    background: "#020617",
+    color: "white",
+    height: "100vh",
+    display: "flex",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+};
 
 export default App;
