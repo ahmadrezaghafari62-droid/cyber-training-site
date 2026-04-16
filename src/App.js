@@ -14,6 +14,7 @@ import Admin from "./Admin";
 import Payment from "./Payment";
 import Training from "./Training";
 import Contact from "./Contact";
+import Certificate from "./Certificate";
 import Completed from "./Completed";
 
 /* ROUTE GUARDS */
