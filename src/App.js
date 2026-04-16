@@ -122,6 +122,7 @@ function App() {
 
   {/* ADMIN */}
   <Route path="/admin" element={<Admin />} />
+  <Route path="/certificate" element={<Certificate />} />
 
   {/* FALLBACK */}
   <Route path="*" element={<Navigate to="/" />} />

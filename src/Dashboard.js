@@ -12,8 +12,6 @@ function Dashboard() {
   const [userData, setUserData] = useState(null);
   const [loading, setLoading] = useState(true);
 
-  const API_URL = "https://cybersentinel-backend-ezpt.onrender.com";
-
   /* ================= HELPERS ================= */
 
   const getPercentage = (score, total) => {
@@ -22,13 +20,11 @@ function Dashboard() {
   };
 
   const getCoursesOnly = () => {
-    Object.entries(progress)
-  .filter(
-    ([key, value]) =>
-      value && typeof value.score === "number" && typeof value.total === "number"
-  )
-  .map(([key, value]) => {
-        value && typeof value.score === "number" && typeof value.total === "number"
+    return Object.entries(progress).filter(
+      ([_, value]) =>
+        value &&
+        typeof value.score === "number" &&
+        typeof value.total === "number"
     );
   };
 
@@ -57,9 +53,9 @@ function Dashboard() {
           setProgress(snap.data());
         } else {
           const defaultProgress = {
-            phishing: { score: 0, total: 5 },
-            passwords: { score: 0, total: 5 },
-            social: { score: 0, total: 5 },
+            phishing: { score: 0, total: 2 },
+            passwords: { score: 0, total: 1 },
+            social: { score: 0, total: 1 },
           };
 
           await setDoc(progressRef, defaultProgress);
@@ -163,18 +159,20 @@ function Dashboard() {
         <h2>Risk Score</h2>
         <h1>{avg}%</h1>
 
-        <p style={{
-          color:
-            riskLevel === "High"
-              ? "#ef4444"
-              : riskLevel === "Medium"
-              ? "#f59e0b"
-              : "#22c55e"
-        }}>
+        <p
+          style={{
+            color:
+              riskLevel === "High"
+                ? "#ef4444"
+                : riskLevel === "Medium"
+                ? "#f59e0b"
+                : "#22c55e",
+          }}
+        >
           {riskLevel} Risk
         </p>
 
-        {/* COMPLETION MESSAGE */}
+        {/* COMPLETION */}
         {courses.length > 0 &&
           courses.every(([_, c]) => c.score === c.total) && (
             <p style={{ color: "#22c55e", marginTop: "10px" }}>
@@ -189,7 +187,9 @@ function Dashboard() {
 
         <p>Overall: {overallProgress}%</p>
         <div style={styles.progressBar}>
-          <div style={{ ...styles.progressFill, width: `${overallProgress}%` }} />
+          <div
+            style={{ ...styles.progressFill, width: `${overallProgress}%` }}
+          />
         </div>
 
         {courses.map(([key, value]) => {
@@ -199,7 +199,9 @@ function Dashboard() {
             <div key={key} style={{ marginTop: "20px" }}>
               <p>{key.toUpperCase()} — {percent}%</p>
               <div style={styles.progressBar}>
-                <div style={{ ...styles.progressFill, width: `${percent}%` }} />
+                <div
+                  style={{ ...styles.progressFill, width: `${percent}%` }}
+                />
               </div>
             </div>
           );

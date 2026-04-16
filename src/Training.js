@@ -98,12 +98,13 @@ function Training() {
 
       // ✅ GO TO COMPLETION PAGE (WITH DATA)
       console.log("🚀 NAVIGATING TO COMPLETED");
-      navigate("/completed", {
-        state: {
-          score: newScore,
-          total: questions.length,
-        },
-      });
+     navigate("/certificate", {
+  state: {
+    score: newScore,
+    total: questions.length,
+    courseId
+  }
+});
 
     } catch (err) {
       console.error("🔥 Save error:", err.message);
