@@ -7,6 +7,8 @@ import {
   onSnapshot,
   doc,
   getDoc,
+  getDocs,
+  setDoc,
 } from "firebase/firestore";
 import { useNavigate } from "react-router-dom";
 
@@ -14,8 +16,46 @@ function Admin() {
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [companyId, setCompanyId] = useState(null);
+  const [inviteEmail, setInviteEmail] = useState("");
 
   const navigate = useNavigate();
+
+  /* ================= INVITE USER ================= */
+
+  const handleInvite = async () => {
+    if (!inviteEmail) return alert("Enter email");
+
+    try {
+      const q = query(
+        collection(db, "users"),
+        where("email", "==", inviteEmail)
+      );
+
+      const snapshot = await getDocs(q);
+
+      if (snapshot.empty) {
+        alert("User not found. They must sign up first.");
+        return;
+      }
+
+      const userDoc = snapshot.docs[0];
+
+      await setDoc(
+        doc(db, "users", userDoc.id),
+        {
+          companyId: companyId,
+          role: "user",
+        },
+        { merge: true }
+      );
+
+      alert("✅ User added to company!");
+      setInviteEmail("");
+    } catch (err) {
+      console.error(err);
+      alert("Error inviting user");
+    }
+  };
 
   /* ================= LOAD COMPANY ================= */
 
@@ -33,8 +73,7 @@ function Admin() {
         const snap = await getDoc(userRef);
 
         if (snap.exists()) {
-          const data = snap.data();
-          setCompanyId(data.companyId);
+          setCompanyId(snap.data().companyId);
         }
       } catch (err) {
         console.error("Error loading company:", err);
@@ -84,6 +123,22 @@ function Admin() {
       <div style={styles.card}>
         <h2>👥 Employees</h2>
 
+        {/* 🔥 INVITE SECTION (ALWAYS VISIBLE) */}
+        <div style={styles.inviteBox}>
+          <input
+            type="email"
+            placeholder="Enter employee email"
+            value={inviteEmail}
+            onChange={(e) => setInviteEmail(e.target.value)}
+            style={styles.input}
+          />
+
+          <button onClick={handleInvite} style={styles.button}>
+            Invite User
+          </button>
+        </div>
+
+        {/* 🔥 TABLE */}
         {users.length === 0 ? (
           <p>No users found</p>
         ) : (
@@ -145,6 +200,16 @@ const styles = {
     background: "#0f172a",
     borderRadius: "10px",
   },
+  inviteBox: {
+    marginBottom: "20px",
+  },
+  input: {
+    padding: "10px",
+    marginRight: "10px",
+    borderRadius: "6px",
+    border: "none",
+    width: "250px",
+  },
   table: {
     width: "100%",
     marginTop: "20px",
@@ -164,7 +229,7 @@ const styles = {
     transition: "background 0.2s",
   },
   button: {
-    marginTop: "20px",
+    marginTop: "10px",
     padding: "10px",
     background: "#38bdf8",
     border: "none",
