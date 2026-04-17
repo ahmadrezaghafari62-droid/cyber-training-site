@@ -12,6 +12,59 @@ function Dashboard() {
   const [userData, setUserData] = useState(null);
   const [loading, setLoading] = useState(true);
 
+  /* ================= LOAD USER ================= */
+
+  useEffect(() => {
+    let unsubUser;
+    let unsubProgress;
+
+    const unsubAuth = onAuthStateChanged(auth, (currentUser) => {
+      if (!currentUser) {
+        navigate("/login");
+        return;
+      }
+
+      setUser(currentUser);
+
+      // 🔥 USER DATA
+      const userRef = doc(db, "users", currentUser.uid);
+      unsubUser = onSnapshot(userRef, (snap) => {
+        if (snap.exists()) {
+          const data = snap.data();
+          console.log("USER DATA:", data);
+          setUserData(data);
+        } else {
+          setUserData({});
+        }
+      });
+
+      // 🔥 PROGRESS
+      const progressRef = doc(db, "progress", currentUser.uid);
+      unsubProgress = onSnapshot(progressRef, async (snap) => {
+        if (snap.exists()) {
+          setProgress(snap.data());
+        } else {
+          const defaultProgress = {
+            phishing: { score: 0, total: 2 },
+            passwords: { score: 0, total: 1 },
+            social: { score: 0, total: 1 },
+          };
+
+          await setDoc(progressRef, defaultProgress);
+          setProgress(defaultProgress);
+        }
+
+        setLoading(false); // ✅ ONLY here
+      });
+    });
+
+    return () => {
+      unsubAuth();
+      if (unsubUser) unsubUser();
+      if (unsubProgress) unsubProgress();
+    };
+  }, [navigate]);
+
   /* ================= HELPERS ================= */
 
   const getPercentage = (score, total) => {
@@ -19,19 +72,68 @@ function Dashboard() {
     return Math.round((score / total) * 100);
   };
 
-  const getCoursesOnly = () =>
-    Object.entries(progress).filter(
-      ([_, v]) =>
-        v &&
-        typeof v.score === "number" &&
-        typeof v.total === "number"
-    );
+  const courses = Object.entries(progress).filter(
+    ([_, v]) =>
+      v &&
+      typeof v.score === "number" &&
+      typeof v.total === "number"
+  );
 
-  /* ================= CREATE COMPANY ================= */
+  /* ================= LOADING FIRST ================= */
+
+  if (loading || !user || !userData) {
+    return <div style={styles.center}>Loading...</div>;
+  }
+
+  /* ================= ACCESS CONTROL ================= */
+
+  const isSubscribed =
+    userData.isSubscribed === true || !!userData.companyId;
+
+  if (!isSubscribed) {
+    return (
+      <div style={styles.page}>
+        <h1>Dashboard</h1>
+        <p>{user.email}</p>
+
+        <div style={styles.warning}>
+          <h3>🔒 Subscription Required</h3>
+          <button onClick={() => navigate("/payment")} style={styles.button}>
+            Upgrade Now
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  /* ================= CALCULATIONS ================= */
+
+  const totalScore = courses.reduce((sum, [_, c]) => sum + c.score, 0);
+  const totalPossible = courses.reduce((sum, [_, c]) => sum + c.total, 0);
+
+  const avg =
+    totalPossible > 0
+      ? Math.round((totalScore / totalPossible) * 100)
+      : 0;
+
+  const overallProgress =
+    courses.length > 0
+      ? Math.round(
+          courses.reduce(
+            (sum, [_, c]) => sum + getPercentage(c.score, c.total),
+            0
+          ) / courses.length
+        )
+      : 0;
+
+  /* ================= ACTIONS ================= */
+
+  const handleLogout = async () => {
+    await signOut(auth);
+    navigate("/login");
+  };
 
   const handleCreateCompany = async () => {
-    console.log("🔥 CLICKED");
-
     if (!user) return;
 
     try {
@@ -54,119 +156,9 @@ function Dashboard() {
 
       alert("✅ Company created!");
     } catch (err) {
-      console.error("🔥 ERROR:", err);
-      alert("Error creating company");
+      console.error(err);
     }
   };
-
-  /* ================= LOAD USER ================= */
-
-  useEffect(() => {
-    let unsubUser;
-    let unsubProgress;
-
-    const unsubAuth = onAuthStateChanged(auth, (currentUser) => {
-      if (!currentUser) {
-        navigate("/login");
-        return;
-      }
-
-      setUser(currentUser);
-
-      const userRef = doc(db, "users", currentUser.uid);
-
-      unsubUser = onSnapshot(userRef, (snap) => {
-        if (snap.exists()) {
-          const data = snap.data();
-          console.log("USER DATA:", data);
-          setUserData(data);
-        } else {
-          setUserData({});
-        }
-      });
-
-      const progressRef = doc(db, "progress", currentUser.uid);
-
-      unsubProgress = onSnapshot(progressRef, async (snap) => {
-        if (snap.exists()) {
-          setProgress(snap.data());
-        } else {
-          const defaultProgress = {
-            phishing: { score: 0, total: 2 },
-            passwords: { score: 0, total: 1 },
-            social: { score: 0, total: 1 },
-          };
-
-          await setDoc(progressRef, defaultProgress);
-          setProgress(defaultProgress);
-        }
-
-        setLoading(false);
-      });
-    });
-
-    return () => {
-      unsubAuth();
-      if (unsubUser) unsubUser();
-      if (unsubProgress) unsubProgress();
-    };
-  }, [navigate]);
-
-  /* ================= CALCULATIONS ================= */
-
-  const courses = getCoursesOnly();
-
-  const totalScore = courses.reduce((sum, [_, c]) => sum + c.score, 0);
-  const totalPossible = courses.reduce((sum, [_, c]) => sum + c.total, 0);
-
-  const avg =
-    totalPossible > 0
-      ? Math.round((totalScore / totalPossible) * 100)
-      : 0;
-
-  let riskLevel = "Low";
-  if (avg < 40) riskLevel = "High";
-  else if (avg < 70) riskLevel = "Medium";
-
-  const overallProgress =
-    courses.length > 0
-      ? Math.round(
-          courses.reduce(
-            (sum, [_, c]) => sum + getPercentage(c.score, c.total),
-            0
-          ) / courses.length
-        )
-      : 0;
-
-  const isSubscribed = userData?.isSubscribed === true;
-
-  /* ================= ACTIONS ================= */
-
-  const handleLogout = async () => {
-    await signOut(auth);
-    navigate("/login");
-  };
-
-  /* ================= STATES ================= */
-
-  if (loading) return <div style={styles.center}>Loading...</div>;
-  if (!user) return <div style={styles.center}>Authenticating...</div>;
-
-  if (!isSubscribed) {
-    return (
-      <div style={styles.page}>
-        <h1>Dashboard</h1>
-        <p>{user.email}</p>
-
-        <div style={styles.warning}>
-          <h3>🔒 Subscription Required</h3>
-          <button onClick={() => navigate("/payment")} style={styles.button}>
-            Upgrade Now
-          </button>
-        </div>
-      </div>
-    );
-  }
 
   /* ================= UI ================= */
 
@@ -181,15 +173,15 @@ function Dashboard() {
 
       <p style={styles.email}>{user.email}</p>
 
-      {/* ✅ COMPANY ALWAYS VISIBLE */}
+      {/* COMPANY */}
       <div style={styles.card}>
         <h2>🏢 Company</h2>
 
         <p style={{ color: "#94a3b8" }}>
-          Company ID: {userData?.companyId || "None"}
+          Company ID: {userData.companyId || "None"}
         </p>
 
-        {!userData?.companyId && (
+        {!userData.companyId && (
           <button onClick={handleCreateCompany} style={styles.button}>
             Create Company
           </button>
@@ -197,15 +189,13 @@ function Dashboard() {
       </div>
 
       <button onClick={() => navigate("/admin")} style={styles.button}>
-  Go to Company Dashboard
-</button>
+        Go to Company Dashboard
+      </button>
 
       {/* RISK */}
       <div style={styles.card}>
         <h2>Risk Score</h2>
         <h1>{avg}%</h1>
-
-        <p style={{ color: "#22c55e" }}>{riskLevel} Risk</p>
       </div>
 
       {/* PROGRESS */}
@@ -238,21 +228,6 @@ function Dashboard() {
             </div>
           );
         })}
-      </div>
-
-      {/* TRAINING */}
-      <div style={styles.card}>
-        <h2>Start Training</h2>
-
-        {["phishing", "passwords", "social"].map((course) => (
-          <button
-            key={course}
-            onClick={() => navigate(`/training/${course}`)}
-            style={styles.button}
-          >
-            {course}
-          </button>
-        ))}
       </div>
     </div>
   );
@@ -318,7 +293,6 @@ const styles = {
   progressFill: {
     height: "100%",
     background: "#22c55e",
-    transition: "width 0.4s ease",
   },
 };
 
