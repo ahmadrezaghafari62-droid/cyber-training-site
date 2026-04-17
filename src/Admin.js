@@ -5,6 +5,8 @@ import {
   query,
   where,
   onSnapshot,
+  doc,
+  getDoc,
 } from "firebase/firestore";
 import { useNavigate } from "react-router-dom";
 
@@ -18,28 +20,28 @@ function Admin() {
   /* ================= LOAD COMPANY ================= */
 
   useEffect(() => {
-    const currentUser = auth.currentUser;
+    const fetchCompany = async () => {
+      const currentUser = auth.currentUser;
 
-    if (!currentUser) {
-      navigate("/login");
-      return;
-    }
-
-    // 🔥 Get user's companyId first
-    const userRef = collection(db, "users");
-
-    const unsubscribeUser = onSnapshot(userRef, (snapshot) => {
-      const current = snapshot.docs.find(
-        (doc) => doc.id === currentUser.uid
-      );
-
-      if (current) {
-        const data = current.data();
-        setCompanyId(data.companyId);
+      if (!currentUser) {
+        navigate("/login");
+        return;
       }
-    });
 
-    return () => unsubscribeUser();
+      try {
+        const userRef = doc(db, "users", currentUser.uid);
+        const snap = await getDoc(userRef);
+
+        if (snap.exists()) {
+          const data = snap.data();
+          setCompanyId(data.companyId);
+        }
+      } catch (err) {
+        console.error("Error loading company:", err);
+      }
+    };
+
+    fetchCompany();
   }, [navigate]);
 
   /* ================= LOAD USERS ================= */
@@ -88,16 +90,25 @@ function Admin() {
           <table style={styles.table}>
             <thead>
               <tr>
-                <th>Email</th>
-                <th>Role</th>
+                <th style={styles.th}>Email</th>
+                <th style={styles.th}>Role</th>
               </tr>
             </thead>
 
             <tbody>
               {users.map((u) => (
-                <tr key={u.id}>
-                  <td>{u.email}</td>
-                  <td>{u.role || "user"}</td>
+                <tr
+                  key={u.id}
+                  style={styles.tr}
+                  onMouseEnter={(e) =>
+                    (e.currentTarget.style.background = "#1e293b")
+                  }
+                  onMouseLeave={(e) =>
+                    (e.currentTarget.style.background = "transparent")
+                  }
+                >
+                  <td style={styles.td}>{u.email}</td>
+                  <td style={styles.td}>{u.role || "user"}</td>
                 </tr>
               ))}
             </tbody>
@@ -138,6 +149,19 @@ const styles = {
     width: "100%",
     marginTop: "20px",
     borderCollapse: "collapse",
+  },
+  th: {
+    textAlign: "left",
+    padding: "12px",
+    borderBottom: "1px solid #334155",
+    color: "#94a3b8",
+  },
+  td: {
+    padding: "12px",
+    borderBottom: "1px solid #1e293b",
+  },
+  tr: {
+    transition: "background 0.2s",
   },
   button: {
     marginTop: "20px",
