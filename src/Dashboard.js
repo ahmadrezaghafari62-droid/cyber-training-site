@@ -196,6 +196,10 @@ function Dashboard() {
         )}
       </div>
 
+      <button onClick={() => navigate("/admin")} style={styles.button}>
+  Go to Company Dashboard
+</button>
+
       {/* RISK */}
       <div style={styles.card}>
         <h2>Risk Score</h2>

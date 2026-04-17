@@ -1,221 +1,153 @@
 import { useEffect, useState } from "react";
-import { db } from "./firebase";
-import { collection, onSnapshot } from "firebase/firestore";
-
+import { db, auth } from "./firebase";
 import {
-  BarChart,
-  Bar,
-  XAxis,
-  YAxis,
-  Tooltip,
-  ResponsiveContainer
-} from "recharts";
+  collection,
+  query,
+  where,
+  onSnapshot,
+} from "firebase/firestore";
+import { useNavigate } from "react-router-dom";
 
 function Admin() {
   const [users, setUsers] = useState([]);
-  const [progressData, setProgressData] = useState({});
-  const [companyStats, setCompanyStats] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [companyId, setCompanyId] = useState(null);
 
-  /* ================= RISK ================= */
+  const navigate = useNavigate();
 
-  const getRiskLevel = (avg) => {
-    if (avg >= 80) return { label: "LOW", icon: "🟢" };
-    if (avg >= 50) return { label: "MEDIUM", icon: "🟡" };
-    return { label: "HIGH", icon: "🔴" };
-  };
+  /* ================= LOAD COMPANY ================= */
+
+  useEffect(() => {
+    const currentUser = auth.currentUser;
+
+    if (!currentUser) {
+      navigate("/login");
+      return;
+    }
+
+    // 🔥 Get user's companyId first
+    const userRef = collection(db, "users");
+
+    const unsubscribeUser = onSnapshot(userRef, (snapshot) => {
+      const current = snapshot.docs.find(
+        (doc) => doc.id === currentUser.uid
+      );
+
+      if (current) {
+        const data = current.data();
+        setCompanyId(data.companyId);
+      }
+    });
+
+    return () => unsubscribeUser();
+  }, [navigate]);
 
   /* ================= LOAD USERS ================= */
 
   useEffect(() => {
-    const unsubscribe = onSnapshot(collection(db, "users"), (snapshot) => {
-      const list = snapshot.docs.map((doc) => ({
+    if (!companyId) return;
+
+    const q = query(
+      collection(db, "users"),
+      where("companyId", "==", companyId)
+    );
+
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const data = snapshot.docs.map((doc) => ({
         id: doc.id,
-        ...doc.data()
+        ...doc.data(),
       }));
-      setUsers(list);
+
+      setUsers(data);
+      setLoading(false);
     });
 
     return () => unsubscribe();
-  }, []);
-
-  /* ================= LOAD PROGRESS ================= */
-
-  useEffect(() => {
-    const unsubscribe = onSnapshot(collection(db, "progress"), (snapshot) => {
-      const map = {};
-      snapshot.docs.forEach((doc) => {
-        map[doc.id] = doc.data();
-      });
-      setProgressData(map);
-    });
-
-    return () => unsubscribe();
-  }, []);
-
-  /* ================= CALCULATE COMPANY ANALYTICS ================= */
-
-  useEffect(() => {
-    const companyMap = {};
-
-    users.forEach((user) => {
-      const userProgress = progressData[user.id];
-      if (!userProgress) return;
-
-      let totalScore = 0;
-      let totalPossible = 0;
-
-      Object.values(userProgress).forEach((course) => {
-        if (course.score !== undefined) {
-          totalScore += course.score;
-          totalPossible += course.total;
-        }
-      });
-
-      const avg =
-        totalPossible > 0
-          ? Math.round((totalScore / totalPossible) * 100)
-          : 0;
-
-      if (!companyMap[user.company]) {
-        companyMap[user.company] = {
-          totalUsers: 0,
-          totalScore: 0
-        };
-      }
-
-      companyMap[user.company].totalUsers += 1;
-      companyMap[user.company].totalScore += avg;
-    });
-
-    const result = Object.entries(companyMap).map(([company, data]) => ({
-      company,
-      avgRisk: Math.round(data.totalScore / data.totalUsers),
-      users: data.totalUsers
-    }));
-
-    setCompanyStats(result);
-  }, [users, progressData]);
-
-  /* ================= LEADERBOARD ================= */
-
-  const sortedCompanies = [...companyStats].sort(
-    (a, b) => b.avgRisk - a.avgRisk
-  );
-
-  /* ================= ALERTS ================= */
-
-  const alerts = [];
-
-  sortedCompanies.forEach((company) => {
-    if (company.avgRisk < 50) {
-      alerts.push(`🚨 ${company.company} is HIGH RISK`);
-    } else if (company.avgRisk < 70) {
-      alerts.push(`⚠️ ${company.company} needs improvement`);
-    }
-  });
+  }, [companyId]);
 
   /* ================= UI ================= */
 
+  if (loading) {
+    return (
+      <div style={styles.center}>
+        <p>Loading company data...</p>
+      </div>
+    );
+  }
+
   return (
-    <div
-      style={{
-        background: "#020617",
-        minHeight: "100vh",
-        color: "white",
-        padding: "40px"
-      }}
-    >
-      <h1 style={{ textAlign: "center" }}>
-        🏢 Company Analytics Dashboard
-      </h1>
+    <div style={styles.page}>
+      <h1>🏢 Company Admin Dashboard</h1>
 
-      {/* ================= ALERTS ================= */}
-      <h2 style={{ marginTop: "30px" }}>⚠️ Alerts</h2>
+      <div style={styles.card}>
+        <h2>👥 Employees</h2>
 
-      {alerts.length === 0 ? (
-        <p style={{ color: "#94a3b8" }}>No alerts</p>
-      ) : (
-        alerts.map((alert, i) => (
-          <div
-            key={i}
-            style={{
-              background: "#7f1d1d",
-              padding: "12px",
-              borderRadius: "8px",
-              marginTop: "10px"
-            }}
-          >
-            {alert}
-          </div>
-        ))
-      )}
+        {users.length === 0 ? (
+          <p>No users found</p>
+        ) : (
+          <table style={styles.table}>
+            <thead>
+              <tr>
+                <th>Email</th>
+                <th>Role</th>
+              </tr>
+            </thead>
 
-      {/* ================= LEADERBOARD ================= */}
-      <h2 style={{ marginTop: "40px" }}>🏆 Company Leaderboard</h2>
-
-      {sortedCompanies.map((c, index) => {
-        const risk = getRiskLevel(c.avgRisk);
-
-        return (
-          <div
-            key={index}
-            style={{
-              background: "#0f172a",
-              padding: "15px",
-              marginTop: "10px",
-              borderRadius: "10px",
-              display: "flex",
-              justifyContent: "space-between"
-            }}
-          >
-            <span>
-              #{index + 1} {c.company}
-            </span>
-            <span>
-              {risk.icon} {c.avgRisk}%
-            </span>
-          </div>
-        );
-      })}
-
-      {/* ================= CHART ================= */}
-      <h2 style={{ marginTop: "40px" }}>
-        Company Risk Comparison
-      </h2>
-
-      <div style={{ width: "100%", height: 300 }}>
-        <ResponsiveContainer>
-          <BarChart data={companyStats}>
-            <XAxis dataKey="company" />
-            <YAxis />
-            <Tooltip />
-            <Bar dataKey="avgRisk" />
-          </BarChart>
-        </ResponsiveContainer>
+            <tbody>
+              {users.map((u) => (
+                <tr key={u.id}>
+                  <td>{u.email}</td>
+                  <td>{u.role || "user"}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
       </div>
 
-      {/* ================= COMPANY TABLE ================= */}
-      <h2 style={{ marginTop: "40px" }}>
-        Company Overview
-      </h2>
-
-      {companyStats.map((c, index) => (
-        <div
-          key={index}
-          style={{
-            background: "#0f172a",
-            padding: "20px",
-            marginTop: "10px",
-            borderRadius: "10px"
-          }}
-        >
-          <h3>{c.company}</h3>
-          <p>👥 Users: {c.users}</p>
-          <p>📊 Avg Risk Score: {c.avgRisk}%</p>
-        </div>
-      ))}
+      <button onClick={() => navigate("/dashboard")} style={styles.button}>
+        Back to Dashboard
+      </button>
     </div>
   );
 }
+
+/* ================= STYLES ================= */
+
+const styles = {
+  page: {
+    background: "#020617",
+    minHeight: "100vh",
+    color: "white",
+    padding: "40px",
+  },
+  center: {
+    display: "flex",
+    justifyContent: "center",
+    alignItems: "center",
+    height: "100vh",
+    color: "white",
+  },
+  card: {
+    marginTop: "30px",
+    padding: "20px",
+    background: "#0f172a",
+    borderRadius: "10px",
+  },
+  table: {
+    width: "100%",
+    marginTop: "20px",
+    borderCollapse: "collapse",
+  },
+  button: {
+    marginTop: "20px",
+    padding: "10px",
+    background: "#38bdf8",
+    border: "none",
+    borderRadius: "6px",
+    color: "white",
+    cursor: "pointer",
+  },
+};
 
 export default Admin;
