@@ -50,15 +50,27 @@ function Signup() {
       const user = userCredential.user;
 
       // 🔥 Create Firestore user document
-      await setDoc(doc(db, "users", user.uid), {
-        email: email.trim(),
-        company: company.trim(),
+      const invite = JSON.parse(localStorage.getItem("invite"));
 
-        // 🚀 Subscription logic
-        role: "free",
-        isSubscribed: false,
-        trialActive: true,
-        subscriptionStatus: "trial",
+let userData = {
+  email: user.email,
+  isSubscribed: false,
+  trialActive: true,
+  createdAt: new Date(),
+};
+
+// ✅ APPLY INVITE DATA
+if (invite) {
+  userData.companyId = invite.companyId;
+  userData.role = invite.role;
+
+  console.log("✅ Joining company:", invite.companyId);
+
+  // remove after use
+  localStorage.removeItem("invite");
+}
+
+await setDoc(doc(db, "users", user.uid), userData);
 
         // 📊 Future analytics
         riskScore: 0,

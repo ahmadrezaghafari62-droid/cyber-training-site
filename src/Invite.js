@@ -8,7 +8,8 @@ function Invite() {
   const navigate = useNavigate();
 
   const [loading, setLoading] = useState(true);
-  const [inviteData, setInviteData] = useState(null);
+
+  /* ================= LOAD INVITE ================= */
 
   useEffect(() => {
     const checkInvite = async () => {
@@ -23,18 +24,24 @@ function Invite() {
         }
 
         const data = snap.data();
-        setInviteData(data);
 
-        // ✅ STORE INVITE TEMPORARILY
-        localStorage.setItem("invite", JSON.stringify({
-          companyId: data.companyId,
-          role: data.role,
-        }));
+        console.log("🔥 INVITE FOUND:", data);
+
+        // ✅ STORE INVITE
+        localStorage.setItem(
+          "invite",
+          JSON.stringify({
+            companyId: data.companyId,
+            role: data.role,
+          })
+        );
+
+        console.log("✅ STORED IN LOCALSTORAGE");
 
         setLoading(false);
 
       } catch (err) {
-        console.error(err);
+        console.error("Invite error:", err);
         alert("Error loading invite");
         navigate("/");
       }
@@ -42,6 +49,8 @@ function Invite() {
 
     checkInvite();
   }, [token, navigate]);
+
+  /* ================= UI ================= */
 
   if (loading) {
     return <div style={styles.center}>Checking invite...</div>;
@@ -63,6 +72,8 @@ function Invite() {
     </div>
   );
 }
+
+/* ================= STYLES ================= */
 
 const styles = {
   page: {
