@@ -17,10 +17,37 @@ function Admin() {
   const [loading, setLoading] = useState(true);
   const [companyId, setCompanyId] = useState(null);
   const [inviteEmail, setInviteEmail] = useState("");
+  const [inviteLink, setInviteLink] = useState("");
 
   const navigate = useNavigate();
 
-  /* ================= INVITE USER ================= */
+  /* ================= GENERATE INVITE LINK ================= */
+
+  const handleGenerateInvite = async () => {
+    if (!companyId) return alert("No company found");
+
+    try {
+      const token = Math.random().toString(36).substring(2, 10);
+
+      await setDoc(doc(db, "invites", token), {
+        companyId,
+        role: "user",
+        createdAt: new Date(),
+      });
+
+      const link = `${window.location.origin}/invite/${token}`;
+
+      setInviteLink(link); // ✅ SHOW LINK
+      await navigator.clipboard.writeText(link);
+
+      alert("✅ Invite link copied!");
+    } catch (err) {
+      console.error(err);
+      alert("Error creating invite");
+    }
+  };
+
+  /* ================= EMAIL INVITE ================= */
 
   const handleInvite = async () => {
     if (!inviteEmail) return alert("Enter email");
@@ -43,7 +70,7 @@ function Admin() {
       await setDoc(
         doc(db, "users", userDoc.id),
         {
-          companyId: companyId,
+          companyId,
           role: "user",
         },
         { merge: true }
@@ -75,8 +102,11 @@ function Admin() {
         if (snap.exists()) {
           setCompanyId(snap.data().companyId);
         }
+
+        setLoading(false);
       } catch (err) {
-        console.error("Error loading company:", err);
+        console.error(err);
+        setLoading(false);
       }
     };
 
@@ -100,7 +130,6 @@ function Admin() {
       }));
 
       setUsers(data);
-      setLoading(false);
     });
 
     return () => unsubscribe();
@@ -123,7 +152,7 @@ function Admin() {
       <div style={styles.card}>
         <h2>👥 Employees</h2>
 
-        {/* 🔥 INVITE SECTION (ALWAYS VISIBLE) */}
+        {/* 🔥 EMAIL INVITE */}
         <div style={styles.inviteBox}>
           <input
             type="email"
@@ -138,9 +167,24 @@ function Admin() {
           </button>
         </div>
 
-        {/* 🔥 TABLE */}
+        {/* 🔥 LINK INVITE */}
+        <button onClick={handleGenerateInvite} style={styles.button}>
+          Generate Invite Link
+        </button>
+
+        {/* ✅ SHOW LINK */}
+        {inviteLink && (
+          <div style={styles.linkBox}>
+            <p>Invite Link:</p>
+            <p style={{ wordBreak: "break-all", color: "#22c55e" }}>
+              {inviteLink}
+            </p>
+          </div>
+        )}
+
+        {/* 🔥 USERS TABLE */}
         {users.length === 0 ? (
-          <p>No users found</p>
+          <p style={{ marginTop: "20px" }}>No users found</p>
         ) : (
           <table style={styles.table}>
             <thead>
@@ -152,16 +196,7 @@ function Admin() {
 
             <tbody>
               {users.map((u) => (
-                <tr
-                  key={u.id}
-                  style={styles.tr}
-                  onMouseEnter={(e) =>
-                    (e.currentTarget.style.background = "#1e293b")
-                  }
-                  onMouseLeave={(e) =>
-                    (e.currentTarget.style.background = "transparent")
-                  }
-                >
+                <tr key={u.id} style={styles.tr}>
                   <td style={styles.td}>{u.email}</td>
                   <td style={styles.td}>{u.role || "user"}</td>
                 </tr>
@@ -201,7 +236,13 @@ const styles = {
     borderRadius: "10px",
   },
   inviteBox: {
-    marginBottom: "20px",
+    marginBottom: "15px",
+  },
+  linkBox: {
+    marginTop: "10px",
+    padding: "10px",
+    background: "#1e293b",
+    borderRadius: "6px",
   },
   input: {
     padding: "10px",
