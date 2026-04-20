@@ -15,6 +15,7 @@ import Payment from "./Payment";
 import Training from "./Training";
 import Contact from "./Contact";
 import Certificate from "./Certificate";
+import Invite from "./Invite";
 
 /* ROUTE GUARDS */
 import ProtectedRoute from "./ProtectedRoute";
@@ -32,7 +33,7 @@ function App() {
         setUser(currentUser);
 
         if (currentUser) {
-          await createUserIfNotExists(currentUser);
+          await ensureUserExists(currentUser);
         }
       } catch (err) {
         console.error("🔥 Auth error:", err);
@@ -44,20 +45,21 @@ function App() {
     return () => unsubscribe();
   }, []);
 
-  /* ================= CREATE USER ================= */
+  /* ================= ENSURE USER ================= */
 
-  const createUserIfNotExists = async (user) => {
+  const ensureUserExists = async (user) => {
     try {
       const userRef = doc(db, "users", user.uid);
       const userSnap = await getDoc(userRef);
 
+      // ✅ ONLY CREATE IF NOT EXISTS
       if (!userSnap.exists()) {
         await setDoc(userRef, {
           email: user.email,
           isSubscribed: false,
           trialActive: true,
-          companyId: null,   // 🔥 READY FOR COMPANY SYSTEM
-          role: "user",      // 🔥 FUTURE: admin/user roles
+          companyId: null,
+          role: "user",
           createdAt: new Date(),
         });
 
@@ -83,7 +85,7 @@ function App() {
   return (
     <Routes>
 
-      {/* HOME (SMART REDIRECT) */}
+      {/* HOME */}
       <Route
         path="/"
         element={user ? <Navigate to="/dashboard" /> : <Landing />}
@@ -93,6 +95,9 @@ function App() {
       <Route path="/login" element={<Login />} />
       <Route path="/signup" element={<Signup />} />
       <Route path="/contact" element={<Contact />} />
+
+      {/* INVITE (PUBLIC!) */}
+      <Route path="/invite/:token" element={<Invite />} />
 
       {/* PAYMENT */}
       <Route path="/payment" element={<Payment />} />
@@ -120,7 +125,7 @@ function App() {
       {/* CERTIFICATE */}
       <Route path="/certificate" element={<Certificate />} />
 
-      {/* ADMIN (FUTURE COMPANY DASHBOARD) */}
+      {/* ADMIN */}
       <Route
         path="/admin"
         element={
