@@ -6,7 +6,7 @@ import { Navigate, useLocation } from "react-router-dom";
 
 function PaymentRoute({ children }) {
   const [loading, setLoading] = useState(true);
-  const [subscribed, setSubscribed] = useState(false);
+  const [hasAccess, setHasAccess] = useState(false);
   const [user, setUser] = useState(null);
 
   const location = useLocation();
@@ -23,7 +23,6 @@ function PaymentRoute({ children }) {
 
       setUser(currentUser);
 
-      // 🔥 Listen to Firestore user data
       unsubscribeFirestore = onSnapshot(
         doc(db, "users", currentUser.uid),
         (docSnap) => {
@@ -32,15 +31,16 @@ function PaymentRoute({ children }) {
 
             console.log("🔥 USER DATA:", data);
 
-            setSubscribed(data.isSubscribed === true);
+            const access =
+              data.isSubscribed === true ||
+              data.trialActive === true ||
+              data.companyId !== null;
+
+            setHasAccess(access);
           } else {
-            setSubscribed(false);
+            setHasAccess(false);
           }
 
-          setLoading(false);
-        },
-        (error) => {
-          console.error("🔥 Firestore error:", error);
           setLoading(false);
         }
       );
@@ -52,35 +52,21 @@ function PaymentRoute({ children }) {
     };
   }, []);
 
-  /* ================= LOADING ================= */
-
   if (loading) {
-    return (
-      <div style={{ textAlign: "center", marginTop: "40px" }}>
-        Checking access...
-      </div>
-    );
+    return <div style={{ textAlign: "center" }}>Checking access...</div>;
   }
-
-  /* ================= AUTH CHECK ================= */
 
   if (!user) {
     return <Navigate to="/login" replace />;
   }
 
-  /* ================= ✅ ALLOW COMPLETION PAGE ================= */
-
-  if (location.pathname === "/completed") {
+  // ✅ Allow training routes
+  if (location.pathname.startsWith("/training")) {
+    if (!hasAccess) {
+      return <Navigate to="/payment" replace />;
+    }
     return children;
   }
-
-  /* ================= 🔐 SUBSCRIPTION CHECK ================= */
-
-  if (!subscribed) {
-    return <Navigate to="/payment" replace />;
-  }
-
-  /* ================= ✅ ACCESS GRANTED ================= */
 
   return children;
 }

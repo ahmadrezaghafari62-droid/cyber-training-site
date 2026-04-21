@@ -8,11 +8,12 @@ function Invite() {
   const navigate = useNavigate();
 
   const [loading, setLoading] = useState(true);
+  const [inviteData, setInviteData] = useState(null);
 
   /* ================= LOAD INVITE ================= */
 
   useEffect(() => {
-    const checkInvite = async () => {
+    const fetchInvite = async () => {
       try {
         const inviteRef = doc(db, "invites", token);
         const snap = await getDoc(inviteRef);
@@ -25,30 +26,35 @@ function Invite() {
 
         const data = snap.data();
 
-        console.log("🔥 INVITE FOUND:", data);
+        const payload = {
+          companyId: data.companyId,
+          companyName: data.companyName,
+          role: data.role || "user",
+        };
 
-        // ✅ STORE INVITE
-        localStorage.setItem(
-          "invite",
-          JSON.stringify({
-            companyId: data.companyId,
-            role: data.role,
-          })
-        );
+        console.log("🔥 INVITE FOUND:", payload);
 
-        console.log("✅ STORED IN LOCALSTORAGE");
+        // ✅ SAVE to sessionStorage (ONLY ONCE)
+        sessionStorage.setItem("invite", JSON.stringify(payload));
 
+        setInviteData(payload);
         setLoading(false);
 
       } catch (err) {
         console.error("Invite error:", err);
-        alert("Error loading invite");
         navigate("/");
       }
     };
 
-    checkInvite();
+    fetchInvite();
   }, [token, navigate]);
+
+  /* ================= ACCEPT ================= */
+
+  const handleAccept = () => {
+    console.log("🔥 USING INVITE:", sessionStorage.getItem("invite"));
+    navigate("/signup");
+  };
 
   /* ================= UI ================= */
 
@@ -60,9 +66,17 @@ function Invite() {
     <div style={styles.page}>
       <h1>🎉 You’ve been invited!</h1>
 
-      <p>You are joining a company.</p>
+      <p>
+        You are joining{" "}
+        <strong>{inviteData?.companyName || "a company"}</strong>
+      </p>
 
-      <button onClick={() => navigate("/signup")} style={styles.button}>
+      {/* ✅ DEBUG (remove later) */}
+      <p style={{ color: "#22c55e", marginTop: "10px" }}>
+        DEBUG: {sessionStorage.getItem("invite")}
+      </p>
+
+      <button onClick={handleAccept} style={styles.button}>
         Accept & Sign Up
       </button>
 

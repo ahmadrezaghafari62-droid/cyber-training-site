@@ -33,7 +33,7 @@ function App() {
         setUser(currentUser);
 
         if (currentUser) {
-          await ensureUserExists(currentUser);
+          await createUserIfNotExists(currentUser);
         }
       } catch (err) {
         console.error("🔥 Auth error:", err);
@@ -47,62 +47,52 @@ function App() {
 
   /* ================= ENSURE USER ================= */
 
-  const ensureUserExists = async (user) => {
-    try {
-      const userRef = doc(db, "users", user.uid);
-      const userSnap = await getDoc(userRef);
+  const createUserIfNotExists = async (user) => {
+    const userRef = doc(db, "users", user.uid);
+    const userSnap = await getDoc(userRef);
 
-      // ✅ ONLY CREATE IF NOT EXISTS
-      if (!userSnap.exists()) {
-        await setDoc(userRef, {
-          email: user.email,
-          isSubscribed: false,
-          trialActive: true,
-          companyId: null,
-          role: "user",
-          createdAt: new Date(),
-        });
+    if (!userSnap.exists()) {
+      await setDoc(userRef, {
+        email: user.email,
+        isSubscribed: false,
+        trialActive: true,
+        companyId: null,
+        role: "user",
+        createdAt: new Date(),
+      });
 
-        console.log("✅ New user created");
-      }
-    } catch (error) {
-      console.error("🔥 Firestore error:", error.message);
+      console.log("✅ New user created");
+    } else {
+      console.log("✅ User already exists — NOT overwriting");
     }
   };
 
   /* ================= LOADING ================= */
 
   if (loading) {
-    return (
-      <div style={styles.loading}>
-        Loading...
-      </div>
-    );
+    return <div style={styles.loading}>Loading...</div>;
   }
 
   /* ================= ROUTES ================= */
 
   return (
     <Routes>
-
-      {/* HOME */}
+      {/* Landing */}
       <Route
         path="/"
-        element={user ? <Navigate to="/dashboard" /> : <Landing />}
+        element={user ? <Navigate to="/dashboard" replace /> : <Landing />}
       />
 
-      {/* PUBLIC */}
+      {/* Public */}
       <Route path="/login" element={<Login />} />
       <Route path="/signup" element={<Signup />} />
       <Route path="/contact" element={<Contact />} />
-
-      {/* INVITE (PUBLIC!) */}
       <Route path="/invite/:token" element={<Invite />} />
 
-      {/* PAYMENT */}
+      {/* Payment */}
       <Route path="/payment" element={<Payment />} />
 
-      {/* DASHBOARD */}
+      {/* Protected */}
       <Route
         path="/dashboard"
         element={
@@ -112,7 +102,7 @@ function App() {
         }
       />
 
-      {/* TRAINING */}
+      {/* Training */}
       <Route
         path="/training/:courseId"
         element={
@@ -122,10 +112,15 @@ function App() {
         }
       />
 
-      {/* CERTIFICATE */}
+      {/* Default training */}
+      <Route
+        path="/training"
+        element={<Navigate to="/training/intro" replace />}
+      />
+
+      {/* Other */}
       <Route path="/certificate" element={<Certificate />} />
 
-      {/* ADMIN */}
       <Route
         path="/admin"
         element={
@@ -135,9 +130,8 @@ function App() {
         }
       />
 
-      {/* FALLBACK */}
-      <Route path="*" element={<Navigate to="/" />} />
-
+      {/* Fallback */}
+      <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   );
 }

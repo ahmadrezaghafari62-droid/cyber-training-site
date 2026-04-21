@@ -1,122 +1,73 @@
-import { useState } from "react";
-import { auth, db } from "./firebase";
-import { doc, setDoc, arrayUnion } from "firebase/firestore";
-import { useParams, useNavigate } from "react-router-dom";
+import { useEffect, useState } from "react";
+import { db } from "./firebase";
+import { doc, getDoc } from "firebase/firestore";
+import { useParams } from "react-router-dom";
 
 function Training() {
   const { courseId } = useParams();
-  const navigate = useNavigate();
 
-  const [step, setStep] = useState(0);
-  const [score, setScore] = useState(0);
-  const [selectedAnswer, setSelectedAnswer] = useState(null);
-  const [saving, setSaving] = useState(false);
+  const [course, setCourse] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
 
-  /* ================= COURSE DATA ================= */
+  /* ================= FETCH COURSE ================= */
 
-  const courseContent = {
-    phishing: [
-      {
-        question: "What is phishing?",
-        options: ["Fishing emails", "Cyber attack", "Antivirus"],
-        answer: "Cyber attack",
-      },
-      {
-        question: "Phishing emails usually:",
-        options: ["Look suspicious", "Look legitimate", "Are safe"],
-        answer: "Look legitimate",
-      },
-    ],
-    passwords: [
-      {
-        question: "Strong password includes:",
-        options: ["123456", "Name only", "Letters, numbers & symbols"],
-        answer: "Letters, numbers & symbols",
-      },
-    ],
-    social: [
-      {
-        question: "Social engineering is:",
-        options: ["Hacking people", "Fixing computers", "Coding"],
-        answer: "Hacking people",
-      },
-    ],
-  };
-
-  const questions = courseContent[courseId] || [];
-
-  /* ================= HANDLE ANSWER ================= */
-
-  const handleAnswer = async (selected) => {
-    if (selectedAnswer) return;
-
-    setSelectedAnswer(selected);
-
-    let newScore = score;
-
-    if (selected === questions[step].answer) {
-      newScore += 1;
-      setScore(newScore);
-    }
-
-    const nextStep = step + 1;
-
-    // 👉 Move to next question
-    if (nextStep < questions.length) {
-      setTimeout(() => {
-        setStep(nextStep);
-        setSelectedAnswer(null);
-      }, 500);
+  useEffect(() => {
+    if (!courseId) {
+      console.log("❌ No courseId in URL");
+      setLoading(false);
       return;
     }
 
-    // 🔥 FINAL STEP — SAVE
-    const user = auth.currentUser;
-    if (!user) return;
+    const fetchCourse = async () => {
+      try {
+        console.log("🔥 FETCHING COURSE:", courseId);
 
-    setSaving(true);
+        const docRef = doc(db, "courses", courseId);
+        const snap = await getDoc(docRef);
 
-    try {
-      await setDoc(
-        doc(db, "progress", user.uid),
-        {
-          [courseId]: {
-            score: newScore,
-            total: questions.length,
-          },
-          history: arrayUnion({
-            courseId,
-            date: new Date().toISOString(),
-            score: newScore,
-            total: questions.length,
-          }),
-        },
-        { merge: true }
-      );
+        if (snap.exists()) {
+          const data = snap.data();
+          console.log("✅ COURSE FOUND:", data);
+          setCourse(data);
+        } else {
+          console.log("❌ NO COURSE FOUND IN FIRESTORE");
+          setError("Course not found");
+        }
 
-      console.log("✅ Progress saved");
+      } catch (err) {
+        console.error("🔥 ERROR FETCHING COURSE:", err);
+        setError("Something went wrong");
+      } finally {
+        setLoading(false);
+      }
+    };
 
-      // 🎓 Navigate to certificate
-      navigate("/certificate", {
-        state: {
-          score: newScore,
-          total: questions.length,
-          courseId,
-        },
-      });
+    fetchCourse();
+  }, [courseId]);
 
-    } catch (err) {
-      console.error("🔥 Save error:", err.message);
-      setSaving(false);
-    }
-  };
+  /* ================= STATES ================= */
 
-  /* ================= NO COURSE ================= */
-
-  if (!questions.length) {
+  if (loading) {
     return (
       <div style={styles.center}>
-        <p>No course found</p>
+        Loading course...
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div style={styles.center}>
+        {error}
+      </div>
+    );
+  }
+
+  if (!course) {
+    return (
+      <div style={styles.center}>
+        No course found
       </div>
     );
   }
@@ -125,43 +76,17 @@ function Training() {
 
   return (
     <div style={styles.page}>
-      <h2 style={{ marginBottom: "20px" }}>
-        {questions[step].question}
-      </h2>
+      <div style={styles.card}>
+        <h1 style={styles.title}>{course.title}</h1>
 
-      {questions[step].options.map((opt, i) => {
-        const isCorrect = opt === questions[step].answer;
-        const isSelected = selectedAnswer === opt;
-
-        return (
-          <button
-            key={i}
-            onClick={() => handleAnswer(opt)}
-            disabled={!!selectedAnswer}
-            style={{
-              ...styles.button,
-              background: isSelected
-                ? isCorrect
-                  ? "#22c55e"
-                  : "#ef4444"
-                : "#38bdf8",
-              opacity: selectedAnswer && !isSelected ? 0.6 : 1,
-            }}
-          >
-            {opt}
-          </button>
-        );
-      })}
-
-      <p style={{ marginTop: "20px", color: "#94a3b8" }}>
-        Question {step + 1} of {questions.length}
-      </p>
-
-      {saving && (
-        <p style={{ marginTop: "10px", color: "#94a3b8" }}>
-          Saving progress...
+        <p style={styles.description}>
+          {course.description}
         </p>
-      )}
+
+        <div style={styles.content}>
+          {course.content}
+        </div>
+      </div>
     </div>
   );
 }
@@ -172,27 +97,36 @@ const styles = {
   page: {
     background: "#020617",
     minHeight: "100vh",
-    color: "white",
-    padding: "40px",
-  },
-  center: {
-    background: "#020617",
-    minHeight: "100vh",
     display: "flex",
     justifyContent: "center",
     alignItems: "center",
     color: "white",
   },
-  button: {
-    display: "block",
-    margin: "10px 0",
-    padding: "12px",
-    width: "300px",
-    border: "none",
-    borderRadius: "6px",
-    cursor: "pointer",
+  card: {
+    background: "rgba(15, 23, 42, 0.9)",
+    padding: "40px",
+    borderRadius: "12px",
+    width: "500px",
+    border: "1px solid #1e293b",
+    textAlign: "center",
+  },
+  title: {
+    marginBottom: "10px",
+  },
+  description: {
+    color: "#94a3b8",
+    marginBottom: "20px",
+  },
+  content: {
+    fontSize: "16px",
+    lineHeight: "1.6",
+  },
+  center: {
+    height: "100vh",
+    display: "flex",
+    justifyContent: "center",
+    alignItems: "center",
     color: "white",
-    fontWeight: "bold",
   },
 };
 

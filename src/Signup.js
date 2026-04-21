@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { auth, db } from "./firebase";
 import { createUserWithEmailAndPassword } from "firebase/auth";
 import { doc, setDoc, serverTimestamp } from "firebase/firestore";
@@ -12,11 +12,20 @@ function Signup() {
   });
 
   const [loading, setLoading] = useState(false);
+  const [invite, setInvite] = useState(null);
+
   const navigate = useNavigate();
 
-  /* ================================
-     🔄 HANDLE INPUT CHANGE
-  ================================= */
+  /* ================= LOAD INVITE ================= */
+
+  useEffect(() => {
+    const storedInvite = JSON.parse(sessionStorage.getItem("invite"));
+    if (storedInvite) {
+      setInvite(storedInvite);
+    }
+  }, []);
+
+  /* ================= HANDLE INPUT ================= */
 
   const handleChange = (e) => {
     setFormData({
@@ -25,14 +34,12 @@ function Signup() {
     });
   };
 
-  /* ================================
-     🔐 SIGNUP FUNCTION
-  ================================= */
+  /* ================= SIGNUP ================= */
 
   const signup = async () => {
     const { email, password, company } = formData;
 
-    if (!email || !password || !company) {
+    if (!email || !password || (!invite && !company)) {
       alert("Please fill all fields");
       return;
     }
@@ -40,7 +47,6 @@ function Signup() {
     try {
       setLoading(true);
 
-      // 🔥 Create Auth user
       const userCredential = await createUserWithEmailAndPassword(
         auth,
         email.trim(),
@@ -49,45 +55,39 @@ function Signup() {
 
       const user = userCredential.user;
 
-      // 🔥 Create Firestore user document
-      const invite = JSON.parse(localStorage.getItem("invite"));
-
-let userData = {
-  email: user.email,
-  isSubscribed: false,
-  trialActive: true,
-  createdAt: new Date(),
-};
-
-// ✅ APPLY INVITE DATA
-if (invite) {
-  userData.companyId = invite.companyId;
-  userData.role = invite.role;
-
-  console.log("✅ Joining company:", invite.companyId);
-
-  // remove after use
-  localStorage.removeItem("invite");
-}
-
-await setDoc(doc(db, "users", user.uid), userData);
-
-        // 📊 Future analytics
+      const userData = {
+        email: user.email,
+        company: invite ? null : company,
+        isSubscribed: false,
+        trialActive: true,
         riskScore: 0,
         quizzesCompleted: 0,
-
         createdAt: serverTimestamp(),
-      });
 
-      console.log("✅ User created:", user.uid);
+        companyId: invite?.companyId || null,
+        role: invite?.role || "user",
+      };
 
-      // ✅ Better UX (no blocking alert)
-      navigate("/dashboard");
+      await setDoc(doc(db, "users", user.uid), userData);
+
+      // ✅ Clear invite AFTER use
+      if (invite) {
+        sessionStorage.removeItem("invite");
+      }
+
+      console.log("✅ User created successfully");
+
+      /* ================= REDIRECT ================= */
+
+      if (invite?.companyId) {
+        navigate("/training/intro");
+      } else {
+        navigate("/dashboard");
+      }
 
     } catch (err) {
-      console.error("🔥 Signup Error:", err);
+      console.error("Signup Error:", err);
 
-      // Clean user-friendly errors
       switch (err.code) {
         case "auth/email-already-in-use":
           alert("Email already registered");
@@ -98,9 +98,6 @@ await setDoc(doc(db, "users", user.uid), userData);
         case "auth/network-request-failed":
           alert("Network error — check your internet");
           break;
-        case "auth/unauthorized-domain":
-          alert("Domain not authorised in Firebase");
-          break;
         default:
           alert("Something went wrong. Try again.");
       }
@@ -109,9 +106,7 @@ await setDoc(doc(db, "users", user.uid), userData);
     }
   };
 
-  /* ================================
-     🎨 UI
-  ================================= */
+  /* ================= UI ================= */
 
   return (
     <div style={styles.page}>
@@ -122,13 +117,23 @@ await setDoc(doc(db, "users", user.uid), userData);
           Start your cybersecurity journey
         </p>
 
-        <input
-          name="company"
-          placeholder="Company Name"
-          value={formData.company}
-          onChange={handleChange}
-          style={styles.input}
-        />
+        {/* ✅ Show company if invited */}
+        {invite && (
+          <p style={{ color: "#38bdf8", marginBottom: "10px" }}>
+            Joining <strong>{invite.companyName}</strong>
+          </p>
+        )}
+
+        {/* ✅ Only show company input if NOT invited */}
+        {!invite && (
+          <input
+            name="company"
+            placeholder="Company Name"
+            value={formData.company}
+            onChange={handleChange}
+            style={styles.input}
+          />
+        )}
 
         <input
           name="email"
@@ -172,9 +177,7 @@ await setDoc(doc(db, "users", user.uid), userData);
   );
 }
 
-/* ================================
-   🎨 STYLES
-================================ */
+/* ================= STYLES ================= */
 
 const styles = {
   page: {
@@ -185,7 +188,6 @@ const styles = {
     alignItems: "center",
     color: "white",
   },
-
   card: {
     background: "rgba(15, 23, 42, 0.9)",
     padding: "40px",
@@ -194,12 +196,10 @@ const styles = {
     textAlign: "center",
     border: "1px solid #1e293b",
   },
-
   subtitle: {
     color: "#94a3b8",
     marginBottom: "20px",
   },
-
   input: {
     width: "100%",
     padding: "12px",
@@ -209,7 +209,6 @@ const styles = {
     background: "#020617",
     color: "white",
   },
-
   button: {
     width: "100%",
     padding: "12px",
@@ -219,12 +218,10 @@ const styles = {
     cursor: "pointer",
     fontSize: "16px",
   },
-
   footerText: {
     marginTop: "15px",
     color: "#94a3b8",
   },
-
   link: {
     color: "#38bdf8",
     cursor: "pointer",
