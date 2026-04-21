@@ -9,7 +9,9 @@ function Home() {
 
       {/* ================= NAVBAR ================= */}
       <div style={styles.navbar}>
-        <h2>🛡️ CyberSentinel</h2>
+        <h2 style={styles.logo}>
+          🛡️ CyberSentinel <span style={{ color: "#38bdf8" }}>HQ</span>
+        </h2>
 
         <div>
           <button onClick={() => navigate("/login")} style={styles.navBtn}>
@@ -83,7 +85,7 @@ function Home() {
 
         <motion.div style={styles.pricingCard} whileHover={{ scale: 1.05 }}>
           <h3>Pro Plan</h3>
-          <h1 style={{ fontSize: "40px" }}>£5</h1>
+          <h1 style={styles.price}>£5</h1>
           <p>/user/month</p>
 
           <button
@@ -95,7 +97,7 @@ function Home() {
         </motion.div>
       </div>
 
-      {/* ================= FINAL CTA ================= */}
+      {/* ================= CTA ================= */}
       <div style={styles.cta}>
         <h2 style={styles.ctaTitle}>Ready to Reduce Human Cyber Risk?</h2>
 
@@ -113,7 +115,7 @@ function Home() {
 
       {/* ================= FOOTER ================= */}
       <div style={styles.footer}>
-        © 2026 CyberSentinel — Built for modern organisations
+        © 2026 CyberSentinel <span style={{ color: "#38bdf8" }}>HQ</span> — Built for modern organisations
       </div>
 
     </div>
@@ -161,7 +163,14 @@ const styles = {
   navbar: {
     display: "flex",
     justifyContent: "space-between",
+    alignItems: "center",
     padding: "20px 40px"
+  },
+
+  logo: {
+    fontSize: "24px",
+    fontWeight: "600",
+    letterSpacing: "-0.5px"
   },
 
   hero: {
@@ -170,12 +179,15 @@ const styles = {
   },
 
   heroTitle: {
-    fontSize: "48px"
+    fontSize: "52px",
+    fontWeight: "700",
+    letterSpacing: "-1px"
   },
 
   heroSubtitle: {
     marginTop: "20px",
-    color: "#94a3b8"
+    color: "#94a3b8",
+    fontSize: "18px"
   },
 
   section: {
@@ -184,7 +196,8 @@ const styles = {
   },
 
   sectionTitle: {
-    fontSize: "28px"
+    fontSize: "30px",
+    fontWeight: "600"
   },
 
   grid: {
@@ -208,13 +221,19 @@ const styles = {
     margin: "30px auto"
   },
 
+  price: {
+    fontSize: "42px",
+    fontWeight: "700"
+  },
+
   cta: {
     padding: "80px 20px",
     textAlign: "center"
   },
 
   ctaTitle: {
-    fontSize: "32px"
+    fontSize: "32px",
+    fontWeight: "600"
   },
 
   ctaText: {
@@ -227,7 +246,8 @@ const styles = {
     border: "none",
     padding: "10px 20px",
     borderRadius: "6px",
-    marginLeft: "10px"
+    marginLeft: "10px",
+    cursor: "pointer"
   },
 
   primaryBtnLarge: {
@@ -235,7 +255,8 @@ const styles = {
     border: "none",
     padding: "14px 30px",
     borderRadius: "8px",
-    marginTop: "20px"
+    marginTop: "20px",
+    cursor: "pointer"
   },
 
   navBtn: {
@@ -243,7 +264,8 @@ const styles = {
     border: "1px solid #38bdf8",
     padding: "10px 20px",
     borderRadius: "6px",
-    color: "white"
+    color: "white",
+    cursor: "pointer"
   },
 
   footer: {

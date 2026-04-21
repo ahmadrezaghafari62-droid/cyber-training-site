@@ -1,116 +1,81 @@
-import { useLocation, useNavigate } from "react-router-dom";
-import html2canvas from "html2canvas";
+import { useEffect, useState } from "react";
+import { auth, db } from "./firebase";
+import { doc, getDoc } from "firebase/firestore";
+import { useParams } from "react-router-dom";
 import jsPDF from "jspdf";
-import { useRef } from "react";
-import { auth } from "./firebase";
 
 function Certificate() {
-  const location = useLocation();
-  const navigate = useNavigate();
-  const certRef = useRef();
+  const { courseId } = useParams();
 
-  const data = location.state;
+  const [user, setUser] = useState(null);
+  const [course, setCourse] = useState(null);
+  const [progress, setProgress] = useState(null);
 
-  /* ================= HANDLE NO DATA ================= */
+  useEffect(() => {
+    const loadData = async () => {
+      const currentUser = auth.currentUser;
+      if (!currentUser) return;
 
-  if (!data) {
-    return (
-      <div style={styles.center}>
-        <h2>No certificate data</h2>
-        <button onClick={() => navigate("/dashboard")} style={styles.button}>
-          Go to Dashboard
-        </button>
-      </div>
-    );
-  }
+      setUser(currentUser);
 
-  const { score, total, courseId } = data;
-
-  const user = auth.currentUser;
-  const certificateId = `CS-${Date.now()}`;
-
-  /* ================= DOWNLOAD PDF ================= */
-
-  const handleDownload = async () => {
-    const element = certRef.current;
-
-    const canvas = await html2canvas(element, {
-      backgroundColor: "#020617",
-      scale: 2,
-      useCORS: true,
-      scrollY: -window.scrollY,
-    });
-
-    const imgData = canvas.toDataURL("image/png");
-
-    const pdf = new jsPDF("p", "mm", "a4");
-
-    const imgWidth = 190;
-    const pageHeight = 297;
-
-    const imgHeight = (canvas.height * imgWidth) / canvas.width;
-
-    let position = 10;
-
-    if (imgHeight < pageHeight) {
-      pdf.addImage(imgData, "PNG", 10, position, imgWidth, imgHeight);
-    } else {
-      let heightLeft = imgHeight;
-
-      pdf.addImage(imgData, "PNG", 10, position, imgWidth, imgHeight);
-      heightLeft -= pageHeight;
-
-      while (heightLeft > 0) {
-        position = heightLeft - imgHeight;
-        pdf.addPage();
-        pdf.addImage(imgData, "PNG", 10, position, imgWidth, imgHeight);
-        heightLeft -= pageHeight;
+      // 🔹 Get course
+      const courseSnap = await getDoc(doc(db, "courses", courseId));
+      if (courseSnap.exists()) {
+        setCourse(courseSnap.data());
       }
-    }
 
-    pdf.save("CyberSentinel-Certificate.pdf");
+      // 🔹 Get progress
+      const progressId = `${currentUser.uid}_${courseId}`;
+      const progressSnap = await getDoc(doc(db, "progress", progressId));
+
+      if (progressSnap.exists()) {
+        setProgress(progressSnap.data());
+      }
+    };
+
+    loadData();
+  }, [courseId]);
+
+  const generatePDF = () => {
+    const pdf = new jsPDF();
+
+    const certId = `CS-${Date.now()}`;
+    const date = new Date().toLocaleDateString();
+
+    pdf.setFontSize(22);
+    pdf.text("Certificate of Completion", 60, 30);
+
+    pdf.setFontSize(16);
+    pdf.text("CyberSentinel HQ Training", 60, 45);
+
+    pdf.setFontSize(12);
+    pdf.text(`Issued to: ${user.email}`, 20, 70);
+    pdf.text(`Course: ${course.title}`, 20, 85);
+    pdf.text(`Status: Completed`, 20, 100);
+    pdf.text(`Certificate ID: ${certId}`, 20, 115);
+    pdf.text(`Date: ${date}`, 20, 130);
+
+    pdf.save(`CyberSentinel-${courseId}-Certificate.pdf`);
   };
 
-  /* ================= UI (JSX) ================= */
+  if (!course || !progress) {
+    return <div style={styles.center}>Loading certificate...</div>;
+  }
 
   return (
     <div style={styles.page}>
-      
-      {/* 🔥 THIS IS WHAT PDF CAPTURES */}
-      <div ref={certRef} style={styles.certificateBox}>
-        <h1 style={{ color: "#22c55e" }}>🎓 Certificate</h1>
+      <div style={styles.card}>
+        <h1>🎓 Certificate of Completion</h1>
 
-        <h2>CyberSentinel Training</h2>
+        <h2>{course.title}</h2>
 
-        <p style={{ marginTop: "20px" }}>
-          Issued to: <strong>{user?.email}</strong>
-        </p>
+        <p>Issued to: {user?.email}</p>
+        <p>Status: {progress.completed ? "Completed" : "Not completed"}</p>
 
-        <p>
-          Course: <strong>{courseId}</strong>
-        </p>
-
-        <p>
-          Score: {score} / {total}
-        </p>
-
-        <p style={{ fontSize: "12px", color: "#94a3b8" }}>
-          Certificate ID: {certificateId}
-        </p>
-
-        <p style={{ marginTop: "20px", color: "#94a3b8" }}>
-          {new Date().toLocaleDateString()}
-        </p>
+        <button onClick={generatePDF} style={styles.button}>
+          Download Certificate
+        </button>
       </div>
-
-      {/* 🔥 BUTTONS */}
-      <button onClick={handleDownload} style={styles.button}>
-        Download PDF
-      </button>
-
-      <button onClick={() => navigate("/dashboard")} style={styles.button}>
-        Back to Dashboard
-      </button>
     </div>
   );
 }
@@ -123,36 +88,29 @@ const styles = {
     minHeight: "100vh",
     color: "white",
     display: "flex",
-    flexDirection: "column",
     justifyContent: "center",
     alignItems: "center",
   },
-  certificateBox: {
-    border: "2px solid #22c55e",
+  card: {
+    background: "#0f172a",
     padding: "40px",
     borderRadius: "12px",
     textAlign: "center",
-    marginBottom: "30px",
-    width: "80%",
-    maxWidth: "600px",
-  },
-  center: {
-    background: "#020617",
-    minHeight: "100vh",
-    color: "white",
-    display: "flex",
-    justifyContent: "center",
-    alignItems: "center",
-    flexDirection: "column",
   },
   button: {
-    marginTop: "15px",
-    padding: "10px 20px",
-    background: "#38bdf8",
+    marginTop: "20px",
+    padding: "12px",
+    background: "#22c55e",
     border: "none",
     borderRadius: "6px",
     color: "white",
     cursor: "pointer",
+  },
+  center: {
+    display: "flex",
+    justifyContent: "center",
+    alignItems: "center",
+    height: "100vh",
   },
 };
 

@@ -48,7 +48,7 @@ function Login() {
         <h2 style={{ marginBottom: "10px" }}>Welcome Back</h2>
 
         <p style={styles.subtitle}>
-          Login to your CyberSentinel account
+          Login to your CyberSentinel HQ account
         </p>
 
         <input

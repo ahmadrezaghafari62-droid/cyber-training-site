@@ -2,23 +2,28 @@ import { useEffect, useState } from "react";
 import { auth, db } from "./firebase";
 import { signOut, onAuthStateChanged } from "firebase/auth";
 import { useNavigate } from "react-router-dom";
-import { doc, onSnapshot, setDoc } from "firebase/firestore";
+import {
+  doc,
+  onSnapshot,
+  collection,
+  getDoc,
+} from "firebase/firestore";
 
 function Dashboard() {
   const navigate = useNavigate();
 
   const [user, setUser] = useState(null);
-  const [progress, setProgress] = useState({});
   const [userData, setUserData] = useState(null);
+  const [courses, setCourses] = useState([]);
+  const [progressMap, setProgressMap] = useState({});
   const [loading, setLoading] = useState(true);
 
-  /* ================= LOAD USER ================= */
+  /* ================= LOAD DATA ================= */
 
   useEffect(() => {
-    let unsubUser;
-    let unsubProgress;
+    let unsubUser, unsubCourses;
 
-    const unsubAuth = onAuthStateChanged(auth, (currentUser) => {
+    const unsubAuth = onAuthStateChanged(auth, async (currentUser) => {
       if (!currentUser) {
         navigate("/login");
         return;
@@ -26,71 +31,59 @@ function Dashboard() {
 
       setUser(currentUser);
 
-      // 🔥 USER DATA
+      /* USER DATA */
       const userRef = doc(db, "users", currentUser.uid);
       unsubUser = onSnapshot(userRef, (snap) => {
-        if (snap.exists()) {
-          const data = snap.data();
-          console.log("USER DATA:", data);
-          setUserData(data);
-        } else {
-          setUserData({});
-        }
+        setUserData(snap.exists() ? snap.data() : {});
       });
 
-      // 🔥 PROGRESS
-      const progressRef = doc(db, "progress", currentUser.uid);
-      unsubProgress = onSnapshot(progressRef, async (snap) => {
-        if (snap.exists()) {
-          setProgress(snap.data());
-        } else {
-          const defaultProgress = {
-            phishing: { score: 0, total: 2 },
-            passwords: { score: 0, total: 1 },
-            social: { score: 0, total: 1 },
-          };
+      /* COURSES */
+      const coursesRef = collection(db, "courses");
 
-          await setDoc(progressRef, defaultProgress);
-          setProgress(defaultProgress);
-        }
+      unsubCourses = onSnapshot(coursesRef, async (snapshot) => {
+        const list = snapshot.docs.map((doc) => ({
+          id: doc.id,
+          ...doc.data(),
+        }));
 
-        setLoading(false); // ✅ ONLY here
+        list.sort((a, b) => (a.order || 0) - (b.order || 0));
+        setCourses(list);
+
+        /* LOAD PROGRESS */
+        const map = {};
+
+        await Promise.all(
+          list.map(async (course) => {
+            const progressId = `${currentUser.uid}_${course.id}`;
+            const snap = await getDoc(doc(db, "progress", progressId));
+
+            map[course.id] = snap.exists()
+              ? snap.data()
+              : { completed: false };
+          })
+        );
+
+        setProgressMap(map);
+        setLoading(false);
       });
     });
 
     return () => {
-      unsubAuth();
+      if (unsubAuth) unsubAuth();
       if (unsubUser) unsubUser();
-      if (unsubProgress) unsubProgress();
+      if (unsubCourses) unsubCourses();
     };
   }, [navigate]);
 
-  /* ================= HELPERS ================= */
+  /* ================= STATES ================= */
 
-  const getPercentage = (score, total) => {
-    if (!total) return 0;
-    return Math.round((score / total) * 100);
-  };
+  if (loading) return <div style={styles.center}>Loading...</div>;
+  if (!user) return null;
 
-  const courses = Object.entries(progress).filter(
-    ([_, v]) =>
-      v &&
-      typeof v.score === "number" &&
-      typeof v.total === "number"
-  );
+  const hasAccess =
+    userData?.isSubscribed === true || !!userData?.companyId;
 
-  /* ================= LOADING FIRST ================= */
-
-  if (loading || !user || !userData) {
-    return <div style={styles.center}>Loading...</div>;
-  }
-
-  /* ================= ACCESS CONTROL ================= */
-
-  const isSubscribed =
-    userData.isSubscribed === true || !!userData.companyId;
-
-  if (!isSubscribed) {
+  if (!hasAccess) {
     return (
       <div style={styles.page}>
         <h1>Dashboard</h1>
@@ -98,33 +91,16 @@ function Dashboard() {
 
         <div style={styles.warning}>
           <h3>🔒 Subscription Required</h3>
-          <button onClick={() => navigate("/payment")} style={styles.button}>
+          <button
+            onClick={() => navigate("/payment")}
+            style={styles.primaryBtn}
+          >
             Upgrade Now
           </button>
         </div>
       </div>
     );
   }
-
-  /* ================= CALCULATIONS ================= */
-
-  const totalScore = courses.reduce((sum, [_, c]) => sum + c.score, 0);
-  const totalPossible = courses.reduce((sum, [_, c]) => sum + c.total, 0);
-
-  const avg =
-    totalPossible > 0
-      ? Math.round((totalScore / totalPossible) * 100)
-      : 0;
-
-  const overallProgress =
-    courses.length > 0
-      ? Math.round(
-          courses.reduce(
-            (sum, [_, c]) => sum + getPercentage(c.score, c.total),
-            0
-          ) / courses.length
-        )
-      : 0;
 
   /* ================= ACTIONS ================= */
 
@@ -133,101 +109,96 @@ function Dashboard() {
     navigate("/login");
   };
 
-  const handleCreateCompany = async () => {
-    if (!user) return;
-
-    try {
-      const companyRef = doc(db, "companies", user.uid);
-
-      await setDoc(companyRef, {
-        companyName: "My Company",
-        ownerId: user.uid,
-        createdAt: new Date(),
-      });
-
-      await setDoc(
-        doc(db, "users", user.uid),
-        {
-          companyId: user.uid,
-          role: "admin",
-        },
-        { merge: true }
-      );
-
-      alert("✅ Company created!");
-    } catch (err) {
-      console.error(err);
-    }
-  };
-
   /* ================= UI ================= */
 
   return (
     <div style={styles.page}>
+      {/* HEADER */}
       <div style={styles.header}>
-        <h1>Dashboard</h1>
+        <div>
+          <h1 style={styles.title}>Dashboard</h1>
+          <p style={styles.subtitle}>{user.email}</p>
+        </div>
+
         <button onClick={handleLogout} style={styles.logout}>
           Logout
         </button>
       </div>
 
-      <p style={styles.email}>{user.email}</p>
+      {/* GRID */}
+      <div style={styles.grid}>
+        {/* COMPANY */}
+        <div style={styles.card}>
+          <h2>🏢 Company</h2>
+          <p style={styles.muted}>
+            {userData?.companyId
+              ? "Connected to company"
+              : "No company yet"}
+          </p>
 
-      {/* COMPANY */}
-      <div style={styles.card}>
-        <h2>🏢 Company</h2>
-
-        <p style={{ color: "#94a3b8" }}>
-          Company ID: {userData.companyId || "None"}
-        </p>
-
-        {!userData.companyId && (
-          <button onClick={handleCreateCompany} style={styles.button}>
-            Create Company
+          <button
+            onClick={() => navigate("/company")}
+            style={styles.primaryBtn}
+          >
+            Company Dashboard
           </button>
-        )}
-      </div>
-
-      <button onClick={() => navigate("/admin")} style={styles.button}>
-        Go to Company Dashboard
-      </button>
-
-      {/* RISK */}
-      <div style={styles.card}>
-        <h2>Risk Score</h2>
-        <h1>{avg}%</h1>
-      </div>
-
-      {/* PROGRESS */}
-      <div style={styles.card}>
-        <h2>📊 Training Progress</h2>
-
-        <p>Overall: {overallProgress}%</p>
-
-        <div style={styles.progressBar}>
-          <div
-            style={{ ...styles.progressFill, width: `${overallProgress}%` }}
-          />
         </div>
 
-        {courses.map(([key, value]) => {
-          const percent = getPercentage(value.score, value.total);
+        {/* COURSES */}
+        <div style={styles.card}>
+          <h2>🎓 Training Courses</h2>
 
-          return (
-            <div key={key} style={{ marginTop: "20px" }}>
-              <p>{key.toUpperCase()} — {percent}%</p>
+          {courses.length === 0 && (
+            <p style={styles.muted}>No courses available</p>
+          )}
 
-              <div style={styles.progressBar}>
-                <div
-                  style={{
-                    ...styles.progressFill,
-                    width: `${percent}%`,
-                  }}
-                />
+          {courses.map((course) => {
+            const progress = progressMap[course.id];
+            const completed = progress?.completed;
+            const percent = completed ? 100 : 0;
+
+            return (
+              <div key={course.id} style={styles.courseItem}>
+                <h3>{course.title}</h3>
+                <p style={styles.muted}>{course.description}</p>
+
+                <p style={styles.muted}>Progress: {percent}%</p>
+
+                <div style={styles.progressBar}>
+                  <div
+                    style={{
+                      ...styles.progressFill,
+                      width: `${percent}%`,
+                    }}
+                  />
+                </div>
+
+                <div style={{ marginTop: "10px" }}>
+                  {/* 🔥 FIXED BUTTON */}
+                  <button
+                    onClick={() =>
+                      navigate(`/training/${course.id}`)
+                    }
+                    style={styles.primaryBtn}
+                  >
+                    {completed ? "Review" : "Start"}
+                  </button>
+
+                  {completed && (
+                    <button
+                      onClick={() =>
+                        navigate(`/certificate/${course.id}`)
+                      }
+                      style={styles.secondaryBtn}
+                    >
+                      Certificate
+                    </button>
+                  )}
+                </div>
               </div>
-            </div>
-          );
-        })}
+            );
+          })}
+        </div>
       </div>
     </div>
   );
@@ -242,57 +213,102 @@ const styles = {
     color: "white",
     padding: "40px",
   },
-  center: {
-    display: "flex",
-    justifyContent: "center",
-    alignItems: "center",
-    height: "100vh",
-    color: "white",
-  },
+
   header: {
     display: "flex",
     justifyContent: "space-between",
+    marginBottom: "40px",
   },
-  email: {
+
+  title: {
+    fontSize: "32px",
+    fontWeight: "600",
+  },
+
+  subtitle: {
     color: "#94a3b8",
+    marginTop: "5px",
   },
+
+  grid: {
+    display: "grid",
+    gridTemplateColumns: "repeat(auto-fit, minmax(300px, 1fr))",
+    gap: "20px",
+  },
+
   card: {
-    marginTop: "30px",
-    padding: "25px",
     background: "#0f172a",
+    padding: "25px",
     borderRadius: "12px",
   },
-  warning: {
-    background: "#7f1d1d",
-    padding: "20px",
+
+  courseItem: {
+    marginTop: "20px",
+    padding: "15px",
+    background: "#020617",
+    borderRadius: "8px",
+  },
+
+  muted: {
+    color: "#94a3b8",
+  },
+
+  progressBar: {
+    width: "100%",
+    height: "8px",
+    background: "#1e293b",
+    borderRadius: "10px",
+    marginTop: "8px",
+  },
+
+  progressFill: {
+    height: "100%",
+    background: "#22c55e",
     borderRadius: "10px",
   },
-  button: {
+
+  primaryBtn: {
     marginTop: "10px",
-    padding: "10px",
+    padding: "8px 12px",
     background: "#38bdf8",
     border: "none",
     borderRadius: "6px",
     color: "white",
     cursor: "pointer",
+    marginRight: "10px",
   },
+
+  secondaryBtn: {
+    marginTop: "10px",
+    padding: "8px 12px",
+    background: "#22c55e",
+    border: "none",
+    borderRadius: "6px",
+    color: "white",
+    cursor: "pointer",
+  },
+
   logout: {
-    background: "red",
+    background: "#ef4444",
+    border: "none",
     padding: "10px",
     borderRadius: "6px",
     color: "white",
-    border: "none",
+    cursor: "pointer",
   },
-  progressBar: {
-    width: "100%",
-    height: "10px",
-    background: "#1e293b",
-    borderRadius: "6px",
-    overflow: "hidden",
+
+  warning: {
+    background: "#7f1d1d",
+    padding: "20px",
+    borderRadius: "10px",
+    marginTop: "20px",
   },
-  progressFill: {
-    height: "100%",
-    background: "#22c55e",
+
+  center: {
+    display: "flex",
+    justifyContent: "center",
+    alignItems: "center",
+    height: "100vh",
   },
 };
 
