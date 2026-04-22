@@ -1,72 +1,48 @@
 import { useEffect, useState } from "react";
 import { auth, db } from "./firebase";
-import { onAuthStateChanged } from "firebase/auth";
-import { doc, onSnapshot } from "firebase/firestore";
-import { Navigate, useLocation } from "react-router-dom";
+import { doc, getDoc } from "firebase/firestore";
+import { Navigate } from "react-router-dom";
 
 function PaymentRoute({ children }) {
   const [loading, setLoading] = useState(true);
   const [hasAccess, setHasAccess] = useState(false);
-  const [user, setUser] = useState(null);
-
-  const location = useLocation();
 
   useEffect(() => {
-    let unsubscribeFirestore;
+    const checkAccess = async () => {
+      const user = auth.currentUser;
 
-    const unsubscribeAuth = onAuthStateChanged(auth, (currentUser) => {
-      if (!currentUser) {
-        setUser(null);
+      if (!user) {
         setLoading(false);
         return;
       }
 
-      setUser(currentUser);
+      try {
+        const userRef = doc(db, "users", user.uid);
+        const snap = await getDoc(userRef);
 
-      unsubscribeFirestore = onSnapshot(
-        doc(db, "users", currentUser.uid),
-        (docSnap) => {
-          if (docSnap.exists()) {
-            const data = docSnap.data();
+        if (snap.exists()) {
+          const data = snap.data();
 
-            console.log("🔥 USER DATA:", data);
+          const access =
+            data?.isSubscribed === true ||
+            data?.trialActive === true ||
+            !!data?.companyId;
 
-            const access =
-              data.isSubscribed === true ||
-              data.trialActive === true ||
-              data.companyId !== null;
-
-            setHasAccess(access);
-          } else {
-            setHasAccess(false);
-          }
-
-          setLoading(false);
+          setHasAccess(access);
         }
-      );
-    });
-
-    return () => {
-      unsubscribeAuth();
-      if (unsubscribeFirestore) unsubscribeFirestore();
+      } catch (err) {
+        console.error("PaymentRoute error:", err);
+      } finally {
+        setLoading(false);
+      }
     };
+
+    checkAccess();
   }, []);
 
-  if (loading) {
-    return <div style={{ textAlign: "center" }}>Checking access...</div>;
-  }
+  if (loading) return <div>Loading...</div>;
 
-  if (!user) {
-    return <Navigate to="/login" replace />;
-  }
-
-  // ✅ Allow training routes
-  if (location.pathname.startsWith("/training")) {
-    if (!hasAccess) {
-      return <Navigate to="/payment" replace />;
-    }
-    return children;
-  }
+  if (!hasAccess) return <Navigate to="/payment" />;
 
   return children;
 }

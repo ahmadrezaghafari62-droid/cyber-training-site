@@ -123,19 +123,12 @@ function App() {
         />
 
         {/* TRAINING */}
-        <Route
+      <Route
           path="/training/:courseId"
-          element={
-            <PaymentRoute>
-              <Training />
-            </PaymentRoute>
-          }
+          element={<Training />}
         />
 
-        <Route
-          path="/training"
-          element={<Navigate to="/training/intro" replace />}
-        />
+       
 
         {/* CERTIFICATE (DYNAMIC ONLY ✅) */}
         <Route

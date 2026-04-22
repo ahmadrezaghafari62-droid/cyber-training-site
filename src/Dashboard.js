@@ -18,10 +18,11 @@ function Dashboard() {
   const [progressMap, setProgressMap] = useState({});
   const [loading, setLoading] = useState(true);
 
-  /* ================= LOAD DATA ================= */
+  /* ================= LOAD EVERYTHING ================= */
 
   useEffect(() => {
-    let unsubUser, unsubCourses;
+    let unsubUser = null;
+    let unsubCourses = null;
 
     const unsubAuth = onAuthStateChanged(auth, async (currentUser) => {
       if (!currentUser) {
@@ -31,39 +32,47 @@ function Dashboard() {
 
       setUser(currentUser);
 
-      /* USER DATA */
+      /* ================= USER ================= */
       const userRef = doc(db, "users", currentUser.uid);
       unsubUser = onSnapshot(userRef, (snap) => {
         setUserData(snap.exists() ? snap.data() : {});
       });
 
-      /* COURSES */
+      /* ================= COURSES ================= */
       const coursesRef = collection(db, "courses");
 
       unsubCourses = onSnapshot(coursesRef, async (snapshot) => {
-        const list = snapshot.docs.map((doc) => ({
-          id: doc.id,
-          ...doc.data(),
+        const courseList = snapshot.docs.map((docSnap) => ({
+          id: docSnap.id,
+          ...docSnap.data(),
         }));
 
-        list.sort((a, b) => (a.order || 0) - (b.order || 0));
-        setCourses(list);
+        // sort by order field
+        courseList.sort((a, b) => (a.order || 0) - (b.order || 0));
 
-        /* LOAD PROGRESS */
-        const map = {};
+        setCourses(courseList);
+
+        /* ================= PROGRESS ================= */
+        const progressData = {};
 
         await Promise.all(
-          list.map(async (course) => {
+          courseList.map(async (course) => {
             const progressId = `${currentUser.uid}_${course.id}`;
-            const snap = await getDoc(doc(db, "progress", progressId));
 
-            map[course.id] = snap.exists()
-              ? snap.data()
-              : { completed: false };
+            try {
+              const snap = await getDoc(doc(db, "progress", progressId));
+
+              progressData[course.id] = snap.exists()
+                ? snap.data()
+                : { completed: false };
+            } catch (err) {
+              console.error("Progress error:", err);
+              progressData[course.id] = { completed: false };
+            }
           })
         );
 
-        setProgressMap(map);
+        setProgressMap(progressData);
         setLoading(false);
       });
     });
@@ -75,13 +84,20 @@ function Dashboard() {
     };
   }, [navigate]);
 
-  /* ================= STATES ================= */
+  /* ================= LOADING ================= */
 
-  if (loading) return <div style={styles.center}>Loading...</div>;
+  if (loading) {
+    return <div style={styles.center}>Loading...</div>;
+  }
+
   if (!user) return null;
 
+  /* ================= ACCESS CONTROL ================= */
+
   const hasAccess =
-    userData?.isSubscribed === true || !!userData?.companyId;
+    userData?.isSubscribed === true ||
+    (userData?.trialActive === true && !userData?.trialExpired) ||
+    !!userData?.companyId;
 
   if (!hasAccess) {
     return (
@@ -154,36 +170,45 @@ function Dashboard() {
 
           {courses.map((course) => {
             const progress = progressMap[course.id];
-            const completed = progress?.completed;
-            const percent = completed ? 100 : 0;
+            const completed = progress?.completed === true;
 
             return (
               <div key={course.id} style={styles.courseItem}>
-                <h3>{course.title}</h3>
-                <p style={styles.muted}>{course.description}</p>
+                <h3>{course.title || "Untitled Course"}</h3>
+                <p style={styles.muted}>
+                  {course.description || "No description"}
+                </p>
 
-                <p style={styles.muted}>Progress: {percent}%</p>
+                <p style={styles.muted}>
+                  Progress: {completed ? "100%" : "0%"}
+                </p>
 
                 <div style={styles.progressBar}>
                   <div
                     style={{
                       ...styles.progressFill,
-                      width: `${percent}%`,
+                      width: completed ? "100%" : "0%",
                     }}
                   />
                 </div>
 
                 <div style={{ marginTop: "10px" }}>
-                  {/* 🔥 FIXED BUTTON */}
+                  {/* START / REVIEW */}
                   <button
-                    onClick={() =>
-                      navigate(`/training/${course.id}`)
-                    }
+                    onClick={() => {
+                      if (!course.id) {
+                        alert("Course ID missing");
+                        return;
+                      }
+
+                      navigate(`/training/${course.id}`);
+                    }}
                     style={styles.primaryBtn}
                   >
                     {completed ? "Review" : "Start"}
                   </button>
 
+                  {/* CERTIFICATE */}
                   {completed && (
                     <button
                       onClick={() =>
@@ -309,6 +334,7 @@ const styles = {
     justifyContent: "center",
     alignItems: "center",
     height: "100vh",
+    color: "white",
   },
 };
 

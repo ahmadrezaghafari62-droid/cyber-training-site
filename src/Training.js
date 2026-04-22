@@ -14,9 +14,12 @@ function Training() {
 
   const [course, setCourse] = useState(null);
   const [progress, setProgress] = useState(null);
+  const [started, setStarted] = useState(false);
   const [loading, setLoading] = useState(true);
 
-  /* ================= FETCH COURSE + PROGRESS ================= */
+  const [step, setStep] = useState(-1); // 🔥 -1 = INTRO
+
+  /* ================= LOAD DATA ================= */
 
   useEffect(() => {
     const fetchData = async () => {
@@ -28,19 +31,21 @@ function Training() {
       }
 
       try {
-        /* GET COURSE */
         const courseRef = doc(db, "courses", courseId);
         const courseSnap = await getDoc(courseRef);
 
         if (!courseSnap.exists()) {
           setCourse(null);
-          setLoading(false);
           return;
         }
 
-        setCourse(courseSnap.data());
+        const data = courseSnap.data();
 
-        /* GET PROGRESS */
+            setCourse(data);
+
+            console.log("COURSE DATA:", data);      // ✅ correct
+            console.log("LESSONS:", data.lessons);  // ✅ correct
+
         const progressRef = doc(
           db,
           "progress",
@@ -51,20 +56,13 @@ function Training() {
 
         if (progressSnap.exists()) {
           setProgress(progressSnap.data());
+          setStarted(true); // 🔥 already started
         } else {
-          const defaultProgress = {
-            userId: user.uid,
-            courseId,
-            completed: false,
-            score: 0,
-            createdAt: serverTimestamp(),
-          };
-
-          await setDoc(progressRef, defaultProgress);
-          setProgress(defaultProgress);
+          setProgress(null);
         }
+
       } catch (err) {
-        console.error("🔥 Training error:", err);
+        console.error("🔥 Error:", err);
       } finally {
         setLoading(false);
       }
@@ -73,78 +71,161 @@ function Training() {
     fetchData();
   }, [courseId]);
 
-  /* ================= MARK COMPLETE ================= */
+  /* ================= START ================= */
+
+  const startCourse = async () => {
+    const user = auth.currentUser;
+    if (!user) return;
+
+    const progressRef = doc(
+      db,
+      "progress",
+      `${user.uid}_${courseId}`
+    );
+
+    const newProgress = {
+      userId: user.uid,
+      courseId,
+      completed: false,
+      score: 0,
+      createdAt: serverTimestamp(),
+    };
+
+    await setDoc(progressRef, newProgress);
+
+    setProgress(newProgress);
+    setStarted(true);
+    setStep(-1); // 🔥 start at intro
+  };
+
+  /* ================= COMPLETE ================= */
 
   const markComplete = async () => {
     const user = auth.currentUser;
-
     if (!user) return;
 
-    try {
-      const progressRef = doc(
-        db,
-        "progress",
-        `${user.uid}_${courseId}`
-      );
+    const progressRef = doc(
+      db,
+      "progress",
+      `${user.uid}_${courseId}`
+    );
 
-      await setDoc(
-        progressRef,
-        {
-          completed: true,
-          score: 100,
-          updatedAt: serverTimestamp(),
-        },
-        { merge: true }
-      );
-
-      setProgress((prev) => ({
-        ...prev,
+    await setDoc(
+      progressRef,
+      {
         completed: true,
-      }));
+        score: 100,
+        updatedAt: serverTimestamp(),
+      },
+      { merge: true }
+    );
 
-      alert("✅ Course completed!");
-    } catch (err) {
-      console.error("🔥 Error:", err);
-    }
+    setProgress((prev) => ({
+      ...prev,
+      completed: true,
+    }));
   };
 
   /* ================= STATES ================= */
 
-  if (loading)
-    return <div style={styles.center}>Loading...</div>;
+  if (loading) return <div style={styles.center}>Loading...</div>;
+  if (!course) return <div style={styles.center}>Course not found</div>;
 
-  if (!course)
-    return <div style={styles.center}>Course not found</div>;
+  const lesson = course?.lessons?.[step];
 
-  const isCompleted = progress?.completed;
+  /* ================= START SCREEN ================= */
 
-  /* ================= UI ================= */
+  if (!started) {
+    return (
+      <div style={styles.page}>
+        <div style={styles.card}>
+          <button onClick={() => navigate("/dashboard")} style={styles.backBtn}>
+            ← Back
+          </button>
+
+          <h1 style={styles.title}>{course.title}</h1>
+          <p style={styles.subtitle}>{course.description}</p>
+
+          <button onClick={startCourse} style={styles.startBtn}>
+            Start Course
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  /* ================= MAIN FLOW ================= */
 
   return (
     <div style={styles.page}>
       <div style={styles.card}>
-        <h1 style={styles.title}>{course.title}</h1>
+        <button onClick={() => navigate("/dashboard")} style={styles.backBtn}>
+          ← Back
+        </button>
 
+        <h1 style={styles.title}>{course.title}</h1>
         <p style={styles.subtitle}>{course.description}</p>
 
-        <div style={styles.content}>{course.content}</div>
+        {/* 🔥 INTRO SCREEN */}
+        {step === -1 && (
+          <>
+            <div style={styles.content}>
+              {(course.content || "No content available")
+                .split("\n")
+                .map((line, i) => (
+                  <p key={i}>{line}</p>
+                ))}
+            </div>
 
-        <p style={styles.status}>
-          Status:{" "}
-          {isCompleted ? "✅ Completed" : "⏳ In Progress"}
-        </p>
+            <button onClick={() => setStep(0)} style={styles.startBtn}>
+              Start Lessons
+            </button>
+          </>
+        )}
 
-        {!isCompleted ? (
-          <button onClick={markComplete} style={styles.completeBtn}>
-            Mark as Complete
-          </button>
-        ) : (
-          <button
-            onClick={() => navigate(`/certificate/${courseId}`)}
-            style={styles.certificateBtn}
-          >
-            View Certificate
-          </button>
+        {/* 🔥 LESSONS */}
+        {step >= 0 && lesson && (
+          <>
+            <h2 style={{ marginTop: "20px" }}>{lesson.title}</h2>
+
+            <div style={styles.content}>{lesson.content}</div>
+
+            {step < course.lessons.length - 1 ? (
+              <button
+                onClick={() => setStep(step + 1)}
+                style={styles.startBtn}
+              >
+                Next Lesson
+              </button>
+            ) : (
+              <>
+                <p style={styles.status}>
+                  Status:{" "}
+                  {progress?.completed
+                    ? "✅ Completed"
+                    : "⏳ In Progress"}
+                </p>
+
+                {!progress?.completed ? (
+                  <button
+                    onClick={markComplete}
+                    style={styles.completeBtn}
+                  >
+                    Mark as Complete
+                  </button>
+                ) : (
+                  <button
+                    onClick={() =>
+                      navigate(`/certificate/${courseId}`)
+                    }
+                    style={styles.certificateBtn}
+                  >
+                    View Certificate
+                  </button>
+                )}
+              </>
+            )}
+          </>
         )}
       </div>
     </div>
@@ -162,7 +243,6 @@ const styles = {
     alignItems: "center",
     color: "white",
   },
-
   card: {
     background: "#0f172a",
     padding: "40px",
@@ -170,28 +250,32 @@ const styles = {
     width: "500px",
     textAlign: "center",
   },
-
   title: {
     fontSize: "28px",
     fontWeight: "600",
   },
-
   subtitle: {
     color: "#94a3b8",
     marginTop: "10px",
   },
-
   content: {
     marginTop: "20px",
     fontSize: "16px",
     lineHeight: "1.6",
   },
-
   status: {
     marginTop: "20px",
     color: "#94a3b8",
   },
-
+  startBtn: {
+    marginTop: "30px",
+    padding: "14px 24px",
+    background: "#38bdf8",
+    border: "none",
+    borderRadius: "8px",
+    color: "white",
+    cursor: "pointer",
+  },
   completeBtn: {
     marginTop: "20px",
     padding: "12px 20px",
@@ -201,7 +285,6 @@ const styles = {
     color: "white",
     cursor: "pointer",
   },
-
   certificateBtn: {
     marginTop: "20px",
     padding: "12px 20px",
@@ -211,7 +294,15 @@ const styles = {
     color: "white",
     cursor: "pointer",
   },
-
+  backBtn: {
+    marginBottom: "20px",
+    padding: "6px 12px",
+    border: "1px solid #38bdf8",
+    background: "transparent",
+    color: "#38bdf8",
+    borderRadius: "6px",
+    cursor: "pointer",
+  },
   center: {
     height: "100vh",
     display: "flex",
