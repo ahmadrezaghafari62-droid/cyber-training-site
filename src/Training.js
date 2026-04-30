@@ -16,15 +16,15 @@ function Training() {
   const [progress, setProgress] = useState(null);
   const [started, setStarted] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [step, setStep] = useState(-1); // -1 = intro
+  const [showQuiz, setShowQuiz] = useState(false);
+  const [passed, setPassed] = useState(false);
 
-  const [step, setStep] = useState(-1); // 🔥 -1 = INTRO
-
-  /* ================= LOAD DATA ================= */
+  /* ================= LOAD ================= */
 
   useEffect(() => {
     const fetchData = async () => {
       const user = auth.currentUser;
-
       if (!user || !courseId) {
         setLoading(false);
         return;
@@ -34,17 +34,10 @@ function Training() {
         const courseRef = doc(db, "courses", courseId);
         const courseSnap = await getDoc(courseRef);
 
-        if (!courseSnap.exists()) {
-          setCourse(null);
-          return;
-        }
+        if (!courseSnap.exists()) return;
 
-        const data = courseSnap.data();
-
-            setCourse(data);
-
-            console.log("COURSE DATA:", data);      // ✅ correct
-            console.log("LESSONS:", data.lessons);  // ✅ correct
+        const courseData = courseSnap.data();
+        setCourse(courseData);
 
         const progressRef = doc(
           db,
@@ -55,14 +48,26 @@ function Training() {
         const progressSnap = await getDoc(progressRef);
 
         if (progressSnap.exists()) {
-          setProgress(progressSnap.data());
-          setStarted(true); // 🔥 already started
-        } else {
-          setProgress(null);
-        }
+          const progressData = progressSnap.data();
+          setProgress(progressData);
+          setStarted(true);
 
+          const savedStep =
+            typeof progressData.currentStep === "number"
+              ? progressData.currentStep
+              : -1;
+
+          setStep(savedStep);
+
+          // If finished lessons → go to quiz
+          if (
+            savedStep >= (courseData.lessons?.length || 0)
+          ) {
+            setShowQuiz(true);
+          }
+        }
       } catch (err) {
-        console.error("🔥 Error:", err);
+        console.error(err);
       } finally {
         setLoading(false);
       }
@@ -88,6 +93,7 @@ function Training() {
       courseId,
       completed: false,
       score: 0,
+      currentStep: -1,
       createdAt: serverTimestamp(),
     };
 
@@ -95,12 +101,54 @@ function Training() {
 
     setProgress(newProgress);
     setStarted(true);
-    setStep(-1); // 🔥 start at intro
+    setStep(-1);
+  };
+
+  /* ================= NEXT ================= */
+
+  const goNext = async () => {
+    const user = auth.currentUser;
+    if (!user) return;
+
+    const nextStep = step + 1;
+
+    const totalLessons = course.lessons?.length || 0;
+
+    // If finished lessons → go to quiz
+    if (nextStep >= totalLessons) {
+      setShowQuiz(true);
+
+      await setDoc(
+        doc(db, "progress", `${user.uid}_${courseId}`),
+        { currentStep: nextStep },
+        { merge: true }
+      );
+
+      return;
+    }
+
+    setStep(nextStep);
+
+    await setDoc(
+      doc(db, "progress", `${user.uid}_${courseId}`),
+      { currentStep: nextStep },
+      { merge: true }
+    );
+  };
+
+  /* ================= QUIZ ================= */
+
+  const handleAnswer = (option) => {
+    if (option === course.quiz.answer) {
+      setPassed(true);
+    } else {
+      alert("Incorrect. Try again.");
+    }
   };
 
   /* ================= COMPLETE ================= */
 
-  const markComplete = async () => {
+  const completeCourse = async () => {
     const user = auth.currentUser;
     if (!user) return;
 
@@ -154,7 +202,7 @@ function Training() {
     );
   }
 
-  /* ================= MAIN FLOW ================= */
+  /* ================= MAIN ================= */
 
   return (
     <div style={styles.page}>
@@ -166,65 +214,73 @@ function Training() {
         <h1 style={styles.title}>{course.title}</h1>
         <p style={styles.subtitle}>{course.description}</p>
 
-        {/* 🔥 INTRO SCREEN */}
+        {/* INTRO */}
         {step === -1 && (
           <>
             <div style={styles.content}>
-              {(course.content || "No content available")
+              {(course.content || "No intro available")
                 .split("\n")
                 .map((line, i) => (
                   <p key={i}>{line}</p>
                 ))}
             </div>
 
-            <button onClick={() => setStep(0)} style={styles.startBtn}>
+            <button onClick={goNext} style={styles.startBtn}>
               Start Lessons
             </button>
           </>
         )}
 
-        {/* 🔥 LESSONS */}
-        {step >= 0 && lesson && (
+        {/* LESSON */}
+        {step >= 0 && lesson && !showQuiz && (
           <>
             <h2 style={{ marginTop: "20px" }}>{lesson.title}</h2>
-
             <div style={styles.content}>{lesson.content}</div>
 
-            {step < course.lessons.length - 1 ? (
-              <button
-                onClick={() => setStep(step + 1)}
-                style={styles.startBtn}
-              >
-                Next Lesson
-              </button>
-            ) : (
-              <>
-                <p style={styles.status}>
-                  Status:{" "}
-                  {progress?.completed
-                    ? "✅ Completed"
-                    : "⏳ In Progress"}
-                </p>
+            <button onClick={goNext} style={styles.startBtn}>
+              Next Lesson
+            </button>
+          </>
+        )}
 
-                {!progress?.completed ? (
-                  <button
-                    onClick={markComplete}
-                    style={styles.completeBtn}
-                  >
-                    Mark as Complete
-                  </button>
-                ) : (
-                  <button
-                    onClick={() =>
-                      navigate(`/certificate/${courseId}`)
-                    }
-                    style={styles.certificateBtn}
-                  >
-                    View Certificate
-                  </button>
-                )}
-              </>
+        {/* QUIZ */}
+        {showQuiz && !progress?.completed && (
+          <>
+            <h2 style={{ marginTop: "20px" }}>Quiz</h2>
+            <p style={styles.content}>{course.quiz.question}</p>
+
+            {course.quiz.options.map((opt, i) => (
+              <button
+                key={i}
+                onClick={() => handleAnswer(opt)}
+                style={styles.optionBtn}
+              >
+                {opt}
+              </button>
+            ))}
+
+            {passed && (
+              <button
+                onClick={completeCourse}
+                style={styles.completeBtn}
+              >
+                Finish Course
+              </button>
             )}
+          </>
+        )}
+
+        {/* COMPLETED */}
+        {progress?.completed && (
+          <>
+            <p style={styles.status}>Status: ✅ Completed</p>
+
+            <button
+              onClick={() => navigate(`/certificate/${courseId}`)}
+              style={styles.certificateBtn}
+            >
+              View Certificate
+            </button>
           </>
         )}
       </div>
@@ -252,20 +308,12 @@ const styles = {
   },
   title: {
     fontSize: "28px",
-    fontWeight: "600",
   },
   subtitle: {
     color: "#94a3b8",
-    marginTop: "10px",
   },
   content: {
     marginTop: "20px",
-    fontSize: "16px",
-    lineHeight: "1.6",
-  },
-  status: {
-    marginTop: "20px",
-    color: "#94a3b8",
   },
   startBtn: {
     marginTop: "30px",
@@ -283,7 +331,6 @@ const styles = {
     border: "none",
     borderRadius: "6px",
     color: "white",
-    cursor: "pointer",
   },
   certificateBtn: {
     marginTop: "20px",
@@ -292,6 +339,16 @@ const styles = {
     border: "none",
     borderRadius: "6px",
     color: "white",
+  },
+  optionBtn: {
+    display: "block",
+    margin: "10px auto",
+    padding: "10px",
+    width: "100%",
+    background: "#1e293b",
+    color: "white",
+    border: "1px solid #38bdf8",
+    borderRadius: "6px",
     cursor: "pointer",
   },
   backBtn: {
