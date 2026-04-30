@@ -47,7 +47,7 @@ function Dashboard() {
           ...docSnap.data(),
         }));
 
-        // SORT
+        // SORT COURSES
         courseList.sort((a, b) => (a.order || 0) - (b.order || 0));
         setCourses(courseList);
 
@@ -57,7 +57,6 @@ function Dashboard() {
         await Promise.all(
           courseList.map(async (course) => {
             const progressId = `${currentUser.uid}_${course.id}`;
-
             const snap = await getDoc(doc(db, "progress", progressId));
 
             progressData[course.id] = snap.exists()
@@ -163,11 +162,29 @@ function Dashboard() {
             const progress = progressMap[course.id] || {};
             const completed = progress.completed === true;
 
-            // ✅ CORRECT PROGRESS CALCULATION
-            const total = course.lessons?.length || 1;
-            const current =
-              progress.currentStep >= 0 ? progress.currentStep + 1 : 0;
-            const percent = Math.round((current / total) * 100);
+            /* ================= PROGRESS FIX ================= */
+
+            const totalLessons = course.lessons?.length || 0;
+
+            const validStep = Math.min(
+              (progress.currentStep ?? -1) + 1,
+              totalLessons
+            );
+
+            let percent = 0;
+
+            if (totalLessons > 0) {
+              percent = Math.round(
+                (validStep / totalLessons) * 100
+              );
+            }
+
+            // FORCE 100% IF COMPLETED
+            if (completed) {
+              percent = 100;
+            }
+
+            /* ================= UI ================= */
 
             return (
               <div key={course.id} style={styles.courseItem}>

@@ -16,9 +16,13 @@ function Training() {
   const [progress, setProgress] = useState(null);
   const [started, setStarted] = useState(false);
   const [loading, setLoading] = useState(true);
-  const [step, setStep] = useState(-1); // -1 = intro
+  const [step, setStep] = useState(-1);
   const [showQuiz, setShowQuiz] = useState(false);
   const [passed, setPassed] = useState(false);
+  const [error, setError] = useState("");
+  const [attempts, setAttempts] = useState(0);
+  const [success, setSuccess] = useState("");
+  const [selectedIndex, setSelectedIndex] = useState(null);
 
   /* ================= LOAD ================= */
 
@@ -31,38 +35,26 @@ function Training() {
       }
 
       try {
-        const courseRef = doc(db, "courses", courseId);
-        const courseSnap = await getDoc(courseRef);
-
+        const courseSnap = await getDoc(doc(db, "courses", courseId));
         if (!courseSnap.exists()) return;
 
         const courseData = courseSnap.data();
         setCourse(courseData);
 
-        const progressRef = doc(
-          db,
-          "progress",
-          `${user.uid}_${courseId}`
-        );
-
+        const progressRef = doc(db, "progress", `${user.uid}_${courseId}`);
         const progressSnap = await getDoc(progressRef);
 
         if (progressSnap.exists()) {
-          const progressData = progressSnap.data();
-          setProgress(progressData);
+          const data = progressSnap.data();
+          setProgress(data);
           setStarted(true);
 
           const savedStep =
-            typeof progressData.currentStep === "number"
-              ? progressData.currentStep
-              : -1;
+            typeof data.currentStep === "number" ? data.currentStep : -1;
 
           setStep(savedStep);
 
-          // If finished lessons → go to quiz
-          if (
-            savedStep >= (courseData.lessons?.length || 0)
-          ) {
+          if (savedStep >= (courseData.lessons?.length || 0)) {
             setShowQuiz(true);
           }
         }
@@ -82,11 +74,7 @@ function Training() {
     const user = auth.currentUser;
     if (!user) return;
 
-    const progressRef = doc(
-      db,
-      "progress",
-      `${user.uid}_${courseId}`
-    );
+    const progressRef = doc(db, "progress", `${user.uid}_${courseId}`);
 
     const newProgress = {
       userId: user.uid,
@@ -111,10 +99,8 @@ function Training() {
     if (!user) return;
 
     const nextStep = step + 1;
-
     const totalLessons = course.lessons?.length || 0;
 
-    // If finished lessons → go to quiz
     if (nextStep >= totalLessons) {
       setShowQuiz(true);
 
@@ -123,7 +109,6 @@ function Training() {
         { currentStep: nextStep },
         { merge: true }
       );
-
       return;
     }
 
@@ -138,11 +123,26 @@ function Training() {
 
   /* ================= QUIZ ================= */
 
-  const handleAnswer = (option) => {
-    if (option === course.quiz.answer) {
+  const handleAnswer = (option, index) => {
+    setSelectedIndex(index);
+
+    const correctIndex = course.quiz.answer;
+
+    if (index === correctIndex) {
       setPassed(true);
+      setError("");
+      setSuccess("✅ Correct! You can now finish the course.");
     } else {
-      alert("Incorrect. Try again.");
+      setSuccess("");
+
+      const newAttempts = attempts + 1;
+      setAttempts(newAttempts);
+
+      if (newAttempts >= 3) {
+        setError("❌ Too many attempts. Restart the course.");
+      } else {
+        setError("❌ Incorrect answer. Try again.");
+      }
     }
   };
 
@@ -152,14 +152,8 @@ function Training() {
     const user = auth.currentUser;
     if (!user) return;
 
-    const progressRef = doc(
-      db,
-      "progress",
-      `${user.uid}_${courseId}`
-    );
-
     await setDoc(
-      progressRef,
+      doc(db, "progress", `${user.uid}_${courseId}`),
       {
         completed: true,
         score: 100,
@@ -168,10 +162,7 @@ function Training() {
       { merge: true }
     );
 
-    setProgress((prev) => ({
-      ...prev,
-      completed: true,
-    }));
+    setProgress((prev) => ({ ...prev, completed: true }));
   };
 
   /* ================= STATES ================= */
@@ -245,29 +236,59 @@ function Training() {
 
         {/* QUIZ */}
         {showQuiz && !progress?.completed && (
-          <>
+          <div>
             <h2 style={{ marginTop: "20px" }}>Quiz</h2>
             <p style={styles.content}>{course.quiz.question}</p>
 
-            {course.quiz.options.map((opt, i) => (
-              <button
-                key={i}
-                onClick={() => handleAnswer(opt)}
-                style={styles.optionBtn}
-              >
-                {opt}
-              </button>
-            ))}
+            {course.quiz.options.map((opt, i) => {
+              const isCorrect = i === course.quiz.answer;
+              const isSelected = i === selectedIndex;
+              const showCorrect = selectedIndex !== null && isCorrect;
+
+              return (
+                <button
+                  key={i}
+                  onClick={() => handleAnswer(opt, i)}
+                  disabled={attempts >= 3 || passed}
+                  style={{
+                    ...styles.optionBtn,
+                    background:
+                      isSelected && isCorrect
+                        ? "#14532d"
+                        : isSelected
+                        ? "#7f1d1d"
+                        : showCorrect
+                        ? "#14532d"
+                        : "#1e293b",
+                    border:
+                      isSelected && isCorrect
+                        ? "2px solid #22c55e"
+                        : isSelected
+                        ? "2px solid #ef4444"
+                        : showCorrect
+                        ? "2px solid #22c55e"
+                        : "1px solid #38bdf8",
+                  }}
+                >
+                  {opt}
+                  {(isSelected || showCorrect) && (
+                    <span style={{ marginLeft: "10px" }}>
+                      {isCorrect ? "✅" : isSelected ? "❌" : ""}
+                    </span>
+                  )}
+                </button>
+              );
+            })}
+
+            {error && <p style={{ color: "#f87171" }}>{error}</p>}
+            {success && <p style={{ color: "#4ade80" }}>{success}</p>}
 
             {passed && (
-              <button
-                onClick={completeCourse}
-                style={styles.completeBtn}
-              >
+              <button onClick={completeCourse} style={styles.completeBtn}>
                 Finish Course
               </button>
             )}
-          </>
+          </div>
         )}
 
         {/* COMPLETED */}
@@ -306,29 +327,20 @@ const styles = {
     width: "500px",
     textAlign: "center",
   },
-  title: {
-    fontSize: "28px",
-  },
-  subtitle: {
-    color: "#94a3b8",
-  },
-  content: {
-    marginTop: "20px",
-  },
+  title: { fontSize: "28px" },
+  subtitle: { color: "#94a3b8" },
+  content: { marginTop: "20px" },
   startBtn: {
     marginTop: "30px",
     padding: "14px 24px",
     background: "#38bdf8",
-    border: "none",
     borderRadius: "8px",
     color: "white",
-    cursor: "pointer",
   },
   completeBtn: {
     marginTop: "20px",
     padding: "12px 20px",
     background: "#22c55e",
-    border: "none",
     borderRadius: "6px",
     color: "white",
   },
@@ -336,29 +348,26 @@ const styles = {
     marginTop: "20px",
     padding: "12px 20px",
     background: "#38bdf8",
-    border: "none",
     borderRadius: "6px",
     color: "white",
   },
   optionBtn: {
-    display: "block",
-    margin: "10px auto",
-    padding: "10px",
-    width: "100%",
-    background: "#1e293b",
-    color: "white",
-    border: "1px solid #38bdf8",
-    borderRadius: "6px",
-    cursor: "pointer",
+      display: "block",
+      margin: "12px auto",
+      padding: "12px",
+      width: "100%",
+      background: "#1e293b",
+      color: "white",
+      border: "1px solid #38bdf8",
+      borderRadius: "6px",
+      cursor: "pointer",
+      transition: "all 0.2s ease",
   },
   backBtn: {
     marginBottom: "20px",
     padding: "6px 12px",
     border: "1px solid #38bdf8",
-    background: "transparent",
     color: "#38bdf8",
-    borderRadius: "6px",
-    cursor: "pointer",
   },
   center: {
     height: "100vh",
