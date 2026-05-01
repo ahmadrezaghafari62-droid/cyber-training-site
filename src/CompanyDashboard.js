@@ -9,21 +9,31 @@ import {
   doc,
   getDoc,
   setDoc,
+  onSnapshot,
+  updateDoc,
 } from "firebase/firestore";
 
 function CompanyDashboard() {
   const navigate = useNavigate();
 
   const [company, setCompany] = useState(null);
-  const [email, setEmail] = useState("");
-  const [message, setMessage] = useState("");
   const [employees, setEmployees] = useState([]);
   const [progressData, setProgressData] = useState({});
+  const [courses, setCourses] = useState([]);
+  const [email, setEmail] = useState("");
+  const [message, setMessage] = useState("");
   const [loading, setLoading] = useState(true);
+  const [filter, setFilter] = useState("ALL");
+
+  // 🔔 Notifications
+  const [notifications, setNotifications] = useState([]);
+  const [showNotifications, setShowNotifications] = useState(false);
+
+  const unreadCount = notifications.filter((n) => !n.read).length;
 
   /* ================= LOAD DATA ================= */
 
-  const loadCompanyData = async () => {
+  useEffect(() => {
     const user = auth.currentUser;
 
     if (!user) {
@@ -31,117 +41,138 @@ function CompanyDashboard() {
       return;
     }
 
-    try {
-      import { onSnapshot } from "firebase/firestore";
+    let unsubNotif = null;
 
-onSnapshot(doc(db, "users", user.uid), (userSnap) => {
-  const userData = userSnap.data();
+    const load = async () => {
+      try {
+        const userSnap = await getDoc(doc(db, "users", user.uid));
+        const userData = userSnap.data();
 
-  if (!userData?.companyId) {
-    setLoading(false);
-    return;
-  }
-
-  loadCompany(userData.companyId);
-});
-      const userData = userSnap.data();
-
-      if (!userData?.companyId) {
-        setLoading(false);
-        return;
-      }
-
-      // COMPANY
-      const companySnap = await getDoc(
-        doc(db, "companies", userData.companyId)
-      );
-
-      setCompany({
-        id: userData.companyId,
-        ...companySnap.data(),
-      });
-
-      // EMPLOYEES
-      const q = query(
-        collection(db, "users"),
-        where("companyId", "==", userData.companyId)
-      );
-
-      const usersSnap = await getDocs(q);
-
-      const users = usersSnap.docs.map((doc) => ({
-        id: doc.id,
-        ...doc.data(),
-      }));
-
-      setEmployees(users);
-
-      // PROGRESS
-      const progressSnap = await getDocs(collection(db, "progress"));
-
-      const progressMap = {};
-
-      progressSnap.docs.forEach((doc) => {
-        const data = doc.data();
-        const { userId, courseId, completed } = data;
-
-        if (!progressMap[userId]) {
-          progressMap[userId] = [];
+        if (!userData?.companyId) {
+          setLoading(false);
+          return;
         }
 
-        progressMap[userId].push({ courseId, completed });
-      });
+        // COMPANY
+        const companySnap = await getDoc(
+          doc(db, "companies", userData.companyId)
+        );
 
-      setProgressData(progressMap);
-      setLoading(false);
+        setCompany({
+          id: userData.companyId,
+          ...companySnap.data(),
+        });
 
-    } catch (err) {
-      console.error(err);
-      setLoading(false);
-    }
-  };
+        // EMPLOYEES
+        const usersSnap = await getDocs(
+          query(
+            collection(db, "users"),
+            where("companyId", "==", userData.companyId)
+          )
+        );
 
-  useEffect(() => {
-    loadCompanyData();
-  }, []);
+        setEmployees(
+          usersSnap.docs.map((d) => ({ id: d.id, ...d.data() }))
+        );
+
+        // COURSES
+        const coursesSnap = await getDocs(collection(db, "courses"));
+        setCourses(
+          coursesSnap.docs.map((d) => ({ id: d.id, ...d.data() }))
+        );
+
+        // PROGRESS
+        const progressSnap = await getDocs(collection(db, "progress"));
+
+        const map = {};
+        progressSnap.docs.forEach((d) => {
+          const data = d.data();
+          if (!map[data.userId]) map[data.userId] = [];
+          map[data.userId].push(data);
+        });
+
+        setProgressData(map);
+
+        // 🔔 NOTIFICATIONS (REAL-TIME)
+        const notifRef = query(
+          collection(db, "notifications"),
+          where("userId", "==", user.uid)
+        );
+
+        unsubNotif = onSnapshot(notifRef, (snap) => {
+          setNotifications(
+            snap.docs.map((d) => ({ id: d.id, ...d.data() }))
+          );
+        });
+
+        setLoading(false);
+      } catch (err) {
+        console.error(err);
+        setLoading(false);
+      }
+    };
+
+    load();
+
+    return () => {
+      if (unsubNotif) unsubNotif();
+    };
+  }, [navigate]);
 
   /* ================= HELPERS ================= */
 
   const getCompletion = (userId) => {
-    const userProgress = progressData[userId] || [];
+    const data = progressData[userId] || [];
+    if (!data.length) return 0;
 
-    if (userProgress.length === 0) return 0;
-
-    const completed = userProgress.filter((p) => p.completed).length;
-
-    return Math.round((completed / userProgress.length) * 100);
+    const completed = data.filter((p) => p.completed).length;
+    return Math.round((completed / data.length) * 100);
   };
 
-  const getRiskLevel = (percent) => {
-    if (percent === 100) return "Low Risk";
-    if (percent >= 50) return "Medium Risk";
+  const getRiskLevel = (p) => {
+    if (p === 100) return "Low Risk";
+    if (p >= 50) return "Medium Risk";
     return "High Risk";
   };
 
-  /* ================= ADD EMPLOYEE ================= */
+  const getCourseStatus = (userId, courseId) => {
+    const data = progressData[userId] || [];
+    const record = data.find((p) => p.courseId === courseId);
+
+    if (!record) return "Not Started";
+    if (record.completed) return "Completed";
+    return "In Progress";
+  };
+
+  /* ================= FILTER ================= */
+
+  const filteredEmployees = employees
+    .map((emp) => {
+      const percent = getCompletion(emp.id);
+      return {
+        ...emp,
+        percent,
+        risk: getRiskLevel(percent),
+      };
+    })
+    .filter((emp) => {
+      if (filter === "ALL") return true;
+      if (filter === "HIGH") return emp.risk === "High Risk";
+      if (filter === "MEDIUM") return emp.risk === "Medium Risk";
+      if (filter === "LOW") return emp.risk === "Low Risk";
+    })
+    .sort((a, b) => a.percent - b.percent);
+
+  /* ================= ACTIONS ================= */
 
   const addEmployee = async () => {
     const user = auth.currentUser;
-
     if (!user || !email) return;
 
-    if (email === user.email) {
-      setMessage("❌ You cannot add yourself");
-      return;
-    }
-
     try {
-      const q = query(
-        collection(db, "users"),
-        where("email", "==", email)
+      const snap = await getDocs(
+        query(collection(db, "users"), where("email", "==", email))
       );
-
-      const snap = await getDocs(q);
 
       if (snap.empty) {
         setMessage("❌ User not found");
@@ -152,38 +183,28 @@ onSnapshot(doc(db, "users", user.uid), (userSnap) => {
 
       await setDoc(
         doc(db, "users", userDoc.id),
-        { companyId: company.id },
+        { companyId: company.id, role: "employee" },
         { merge: true }
       );
 
-      setMessage("✅ Employee added successfully");
+      setMessage("✅ Employee added");
       setEmail("");
-
-      // 🔥 refresh employees instantly
-      loadCompanyData();
-
     } catch (err) {
       console.error(err);
       setMessage("❌ Error adding employee");
     }
   };
 
-  /* ================= LOADING ================= */
+  const markAsRead = async (id) => {
+    await updateDoc(doc(db, "notifications", id), {
+      read: true,
+    });
+  };
 
-  if (loading) {
-    return <div style={styles.center}>Loading company data...</div>;
-  }
+  /* ================= UI ================= */
 
-  if (!company) {
-    return (
-      <div style={styles.page}>
-        <h1>No company found</h1>
-        <p>You are not part of a company yet.</p>
-      </div>
-    );
-  }
-
-  /* ================= COMPANY METRICS ================= */
+  if (loading) return <div style={styles.center}>Loading...</div>;
+  if (!company) return <div style={styles.page}>No company found</div>;
 
   const avg =
     employees.length > 0
@@ -195,65 +216,68 @@ onSnapshot(doc(db, "users", user.uid), (userSnap) => {
         )
       : 0;
 
-  /* ================= UI ================= */
-
   return (
     <div style={styles.page}>
-      <h1>🏢 {company.name || "Company Dashboard"}</h1>
+      {/* HEADER */}
+      <div style={styles.header}>
+        <h1>🏢 {company.name}</h1>
 
-      {/* COMPANY METRIC */}
+        {/* 🔔 BELL */}
+        <div style={{ position: "relative" }}>
+          <button
+            onClick={() =>
+              setShowNotifications(!showNotifications)
+            }
+            style={styles.bell}
+          >
+            🔔
+            {unreadCount > 0 && (
+              <span style={styles.badge}>{unreadCount}</span>
+            )}
+          </button>
+
+          {showNotifications && (
+            <div style={styles.dropdown}>
+              {notifications.map((n) => (
+                <div
+                  key={n.id}
+                  style={styles.notificationItem}
+                  onClick={() => markAsRead(n.id)}
+                >
+                  <p>{n.message}</p>
+                  {!n.read && <span>• New</span>}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* METRIC */}
       <div style={styles.card}>
         <h2>📊 Company Completion</h2>
         <h1>{avg}%</h1>
       </div>
 
-      {/* ADD EMPLOYEE */}
+      {/* FILTER */}
       <div style={styles.card}>
-        <h2>➕ Add Employee</h2>
-
-        <input
-          type="email"
-          placeholder="Enter employee email"
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-          style={styles.input}
-        />
-
-        <button onClick={addEmployee} style={styles.primaryBtn}>
-          Add Employee
-        </button>
-
-        {message && <p style={styles.muted}>{message}</p>}
+        <h2>🎯 Filter</h2>
+        <button onClick={() => setFilter("ALL")}>All</button>
+        <button onClick={() => setFilter("HIGH")}>High</button>
+        <button onClick={() => setFilter("MEDIUM")}>Medium</button>
+        <button onClick={() => setFilter("LOW")}>Low</button>
       </div>
 
       {/* EMPLOYEES */}
       <div style={styles.card}>
-        <h2>👥 Employees ({employees.length})</h2>
-
-        {employees.map((emp) => {
-          const percent = getCompletion(emp.id);
-          const risk = getRiskLevel(percent);
-
-          return (
-            <div key={emp.id} style={styles.employee}>
-              <div>
-                <p>{emp.email}</p>
-                <p style={styles.muted}>
-                  {percent}% • {risk}
-                </p>
-              </div>
-
-              <div style={styles.progressBar}>
-                <div
-                  style={{
-                    ...styles.progressFill,
-                    width: `${percent}%`,
-                  }}
-                />
-              </div>
-            </div>
-          );
-        })}
+        {filteredEmployees.map((emp) => (
+          <div key={emp.id} style={styles.employee}>
+            <p>{emp.email}</p>
+            <p>
+              {emp.percent}% • {emp.risk}
+            </p>
+          </div>
+        ))}
       </div>
     </div>
   );
@@ -262,65 +286,22 @@ onSnapshot(doc(db, "users", user.uid), (userSnap) => {
 /* ================= STYLES ================= */
 
 const styles = {
-  page: {
-    background: "#020617",
-    minHeight: "100vh",
-    color: "white",
-    padding: "40px",
-  },
-  card: {
+  page: { padding: "40px", color: "white", background: "#020617" },
+  header: { display: "flex", justifyContent: "space-between" },
+  card: { background: "#0f172a", padding: "20px", marginTop: "20px" },
+  employee: { marginTop: "10px" },
+  center: { display: "flex", justifyContent: "center", height: "100vh" },
+
+  bell: { fontSize: "20px", background: "transparent", color: "white" },
+  badge: { background: "red", borderRadius: "50%", padding: "2px 6px" },
+  dropdown: {
+    position: "absolute",
+    top: "30px",
+    right: 0,
     background: "#0f172a",
-    padding: "25px",
-    borderRadius: "12px",
-    marginTop: "20px",
-  },
-  employee: {
-    marginTop: "15px",
-    padding: "15px",
-    background: "#020617",
-    borderRadius: "8px",
-  },
-  input: {
-    width: "100%",
     padding: "10px",
-    marginTop: "10px",
-    borderRadius: "6px",
-    border: "1px solid #38bdf8",
-    background: "#020617",
-    color: "white",
   },
-  primaryBtn: {
-    marginTop: "10px",
-    padding: "10px",
-    background: "#38bdf8",
-    border: "none",
-    borderRadius: "6px",
-    color: "white",
-    cursor: "pointer",
-  },
-  muted: {
-    color: "#94a3b8",
-    marginTop: "10px",
-  },
-  progressBar: {
-    width: "100%",
-    height: "8px",
-    background: "#1e293b",
-    borderRadius: "10px",
-    marginTop: "8px",
-  },
-  progressFill: {
-    height: "100%",
-    background: "#38bdf8",
-    borderRadius: "10px",
-  },
-  center: {
-    display: "flex",
-    justifyContent: "center",
-    alignItems: "center",
-    height: "100vh",
-    color: "white",
-  },
+  notificationItem: { padding: "5px", cursor: "pointer" },
 };
 
 export default CompanyDashboard;
